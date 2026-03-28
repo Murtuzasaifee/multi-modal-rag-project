@@ -1,0 +1,16 @@
+pipeline:
+  maas:
+    enabled: true
+    api_key: null
+    model: glm-ocr
+
+  layout:
+    enable_layout: true
+    confidence_threshold: 0.3
+    nms_threshold: 0.5
+
+  output:
+    format: json
+    include_bbox: true
+    include_images: false
+    max_tokens: 8192
