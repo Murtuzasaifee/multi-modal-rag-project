@@ -1,0 +1,66 @@
+# ── Secrets & environment ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Python ────────────────────────────────────────────────────────────────────
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.so
+*.egg
+pip-wheel-metadata/
+
+# ── Type checking / linting / testing caches ──────────────────────────────────
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# ── Data directories (large / generated files) ────────────────────────────────
+data/raw/
+data/processed/
+output/
+models/
+test_data/
+
+# ── Ollama local pipeline output ──────────────────────────────────────────────
+ollama/output/
+
+# ── Notebooks ─────────────────────────────────────────────────────────────────
+*.ipynb_checkpoints/
+
+# ── Frontend (React app — lives on react-ui branch, not master) ───────────────
+frontend/
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+**/.DS_Store
+
+# ── IDE / editors ─────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── Logs & runtime artifacts ──────────────────────────────────────────────────
+*.log
+output.txt
+*.tmp
+
+# ── Project-specific scratch files ───────────────────────────────────────────
+CLAUDE.md
+uv.lock
+docling_report.pdf
+pp_doclayout_v3_glm_ocr_implementation_plan.md
+
+# ── Claude Code local config ──────────────────────────────────────────────────
+.claude/
