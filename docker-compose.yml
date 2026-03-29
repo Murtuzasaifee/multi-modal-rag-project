@@ -1,4 +1,22 @@
 services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      # Override .env — Docker resolves service names as hostnames
+      - QDRANT_URL=http://qdrant:6333
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output
+      - ./config.yaml:/app/config.yaml:ro
+      - ./ollama/config.docker.yaml:/app/ollama/config.yaml:ro
+      - huggingface_cache:/root/.cache/huggingface
+    depends_on:
+      - qdrant
+      - ollama
+
   qdrant:
     image: qdrant/qdrant:v1.13.3
     ports:
@@ -9,5 +27,23 @@ services:
     environment:
       - QDRANT__SERVICE__GRPC_PORT=6334
 
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+
+  visualizer:
+    build:
+      context: .
+      dockerfile: Dockerfile.visualizer
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./ollama/output:/app/ollama/output
+
 volumes:
   qdrant_data:
+  ollama_models:
+  huggingface_cache:

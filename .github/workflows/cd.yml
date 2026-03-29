@@ -1,0 +1,73 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      app_image: ${{ steps.build-app.outputs.image }}
+      viz_image: ${{ steps.build-viz.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push app image
+        id: build-app
+        run: |
+          IMAGE=${{ env.ECR_REGISTRY }}/doc-parser/app:${{ github.sha }}
+          docker build -t $IMAGE .
+          docker tag $IMAGE ${{ env.ECR_REGISTRY }}/doc-parser/app:latest
+          docker push $IMAGE
+          docker push ${{ env.ECR_REGISTRY }}/doc-parser/app:latest
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+
+      - name: Build and push visualizer image
+        id: build-viz
+        run: |
+          IMAGE=${{ env.ECR_REGISTRY }}/doc-parser/visualizer:${{ github.sha }}
+          docker build -f Dockerfile.visualizer -t $IMAGE .
+          docker tag $IMAGE ${{ env.ECR_REGISTRY }}/doc-parser/visualizer:latest
+          docker push $IMAGE
+          docker push ${{ env.ECR_REGISTRY }}/doc-parser/visualizer:latest
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Force new deployment
+        run: |
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.ECS_SERVICE_APP }} \
+            --force-new-deployment
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.ECS_SERVICE_VISUALIZER }} \
+            --force-new-deployment
+
+      - name: Wait for services stable
+        run: |
+          aws ecs wait services-stable \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --services ${{ secrets.ECS_SERVICE_APP }} ${{ secrets.ECS_SERVICE_VISUALIZER }}

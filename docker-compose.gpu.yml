@@ -1,0 +1,88 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output
+      - ./config.yaml:/app/config.yaml:ro
+      - ./ollama/config.docker.yaml:/app/ollama/config.yaml:ro
+      - huggingface_cache:/root/.cache/huggingface
+    depends_on:
+      qdrant:
+        condition: service_started
+      ollama:
+        condition: service_healthy
+    # PP-DocLayoutV3 runs on GPU — same device as Ollama (GLM-OCR).
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.3
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    environment:
+      # Allow 4 concurrent OCR region requests — glm-ocr is ~2 GB VRAM,
+      # 4 parallel slots use ~8 GB leaving 8 GB headroom on a T4 (16 GB).
+      - OLLAMA_NUM_PARALLEL=4
+      # Keep model loaded between requests (no reload overhead per region)
+      - OLLAMA_KEEP_ALIVE=-1
+      # Enable Flash Attention — L4 is Ada Lovelace (compute 8.9), fully supported.
+      # Speeds up attention computation during GLM-OCR inference.
+      - OLLAMA_FLASH_ATTENTION=1
+      # Set context window to 16384 to prevent OCR truncation.
+      # config.docker.yaml requests max_tokens=8192; Ollama's vram-based default
+      # was 4096 — too small for dense pages. VRAM budget: model=2.2 GiB +
+      # KV cache (16384 ctx × 4 slots) ≈ 4 GiB = ~6.2 GiB total of 22.5 GiB.
+      - OLLAMA_CONTEXT_LENGTH=16384
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    # GLM-OCR (0.9B) offloaded entirely to GPU — ~2 GB VRAM
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  visualizer:
+    build:
+      context: .
+      dockerfile: Dockerfile.visualizer
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./ollama/output:/app/ollama/output
+
+volumes:
+  qdrant_data:
+  ollama_models:
+  huggingface_cache:

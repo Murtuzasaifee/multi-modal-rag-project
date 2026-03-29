@@ -1,0 +1,44 @@
+# GPU image — use with docker-compose.gpu.yml on NVIDIA hardware (Lightning AI, etc.)
+# PP-DocLayoutV3 runs on GPU in this container (standard PyTorch ops, no NVRTC/JIT).
+# GLM-OCR inference runs on GPU inside the Ollama container via nvidia device passthrough.
+# python:3.12-slim works fine — PyTorch cu124 bundles its own CUDA runtime libraries.
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# System deps required by PyMuPDF and OpenCV
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 libglib2.0-0 && rm -rf /var/lib/apt/lists/*
+
+RUN pip install uv --no-cache-dir
+
+# Install CUDA 12.4 PyTorch — PP-DocLayoutV3 runs on GPU (L4, compute 8.9).
+# Use --index-url (not --extra-index-url) to prevent pip falling back to PyPI
+# and pulling a cu130 wheel, which does NOT bundle libnvrtc-builtins.so.13.0.
+# The cu124 wheel bundles libnvrtc-builtins.so.12.4.X in torch/lib/, and
+# CUDA driver 13.0 is backward-compatible with toolkit 12.4.
+RUN uv pip install --system --no-cache \
+    torch torchvision \
+    --index-url https://download.pytorch.org/whl/cu124
+
+# Install remaining deps (layer cache)
+COPY pyproject.toml .
+RUN uv pip install --system --no-cache -e ".[layout]"
+
+COPY src/ src/
+COPY scripts/ scripts/
+COPY config.yaml .
+COPY ollama/config.yaml ollama/config.yaml
+
+# Add CUDA 13 runtime libs to LD_LIBRARY_PATH so dlopen finds libnvrtc-builtins.so.13.0.
+# PyTorch cu130 installs it under nvidia/cu13/lib/ but doesn't add that dir to the
+# dynamic linker search path, causing NVRTC JIT to fail at inference time.
+ENV LD_LIBRARY_PATH=/usr/local/lib/python3.12/site-packages/nvidia/cu13/lib:$LD_LIBRARY_PATH
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+EXPOSE 8000
+# Pre-warm both GPU models before accepting traffic, then start the API server.
+# warmup.py compiles NVRTC kernels (PP-DocLayoutV3) and loads glm-ocr into Ollama
+# VRAM so the first real ingest request hits hot models instead of a 2-min cold start.
+CMD ["sh", "-c", "python scripts/warmup.py && python scripts/serve.py"]
