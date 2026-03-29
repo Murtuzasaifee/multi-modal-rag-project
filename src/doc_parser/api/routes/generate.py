@@ -26,7 +26,7 @@ _DEFAULT_SYSTEM_PROMPT = (
 
 @router.post("", response_model=GenerateResponse)
 async def generate(req: GenerateRequest) -> GenerateResponse:
-    """Retrieve relevant chunks and generate an answer with GPT-4o.
+    """Retrieve relevant chunks and generate an answer with GPT-5.4-mini.
 
     1. Embed query → hybrid search in Qdrant.
     2. Optionally rerank candidates.
@@ -68,11 +68,21 @@ async def generate(req: GenerateRequest) -> GenerateResponse:
             c.setdefault("rerank_score", None)
         candidates = candidates[:top_n]
 
-    # Build context string from retrieved chunks
+    # Build context string from retrieved chunks — modality-aware so the
+    # generation LLM sees full table data, not just the retrieval summary.
     context_parts: list[str] = []
     for c in candidates:
         page = c.get("page", "?")
-        text = c.get("text", "") or c.get("caption") or ""
+        modality = c.get("modality", "text")
+        if modality == "table":
+            caption = c.get("caption") or ""
+            summary = c.get("text") or ""
+            if caption and summary:
+                text = f"{summary}\n\nFull table data:\n{caption}"
+            else:
+                text = caption or summary
+        else:
+            text = c.get("text", "") or c.get("caption") or ""
         context_parts.append(f"[page {page}] {text}")
     context = "\n\n".join(context_parts)
 

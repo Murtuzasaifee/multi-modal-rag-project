@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     # Feature flags
     image_caption_enabled: bool = True
 
+    # Captioning tuning
+    table_max_tokens: int = 2000
+    table_max_input_chars: int = 12_000
+    image_max_tokens: int = 800
+    table_use_vision: bool = False
+
     # API server
     api_host: str = "0.0.0.0"
     api_port: int = 8000
