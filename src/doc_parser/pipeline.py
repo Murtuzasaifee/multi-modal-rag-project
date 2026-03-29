@@ -257,3 +257,15 @@ class DocumentParser:
                 raise
 
         return results
+
+
+def create_parser() -> DocumentParser:
+    """Return the configured parser backend based on PARSER_BACKEND setting.
+
+    Returns a ChandraParser when PARSER_BACKEND=chandra, otherwise
+    a DocumentParser (cloud or ollama).
+    """
+    if get_settings().parser_backend == "chandra":
+        from doc_parser.chandra_parser import ChandraParser  # lazy import
+        return ChandraParser()  # type: ignore[return-value]
+    return DocumentParser()

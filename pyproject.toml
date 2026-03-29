@@ -40,6 +40,9 @@ qwen = [
 gemini = [
     "google-genai>=1.0.0",
 ]
+chandra = [
+    "chandra-ocr[hf]>=0.1.0",
+]
 layout = [
     "glmocr[layout]",
     "torch>=2.10",

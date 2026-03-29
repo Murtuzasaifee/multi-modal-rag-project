@@ -21,7 +21,7 @@ from rich.console import Console
 from rich.logging import RichHandler
 
 from doc_parser.chunker import Chunk, structure_aware_chunking
-from doc_parser.pipeline import DocumentParser, ParseResult
+from doc_parser.pipeline import ParseResult, create_parser
 from doc_parser.post_processor import save_to_json
 
 console = Console()
@@ -174,7 +174,7 @@ def main() -> int:
     )
 
     try:
-        parser = DocumentParser()
+        parser = create_parser()
     except ImportError as e:
         console.print(f"[red]Error:[/red] {e}")
         return 1

@@ -18,7 +18,7 @@ from doc_parser.chunker import Chunk, document_aware_chunking
 from doc_parser.config import get_settings
 from doc_parser.ingestion.embedder import embed_chunks
 from doc_parser.ingestion.image_captioner import enrich_chunks
-from doc_parser.pipeline import DocumentParser
+from doc_parser.pipeline import create_parser
 
 _CHUNKS_OUTPUT_DIR = Path("data/chunks")
 
@@ -99,7 +99,7 @@ async def _run_ingest(
 
     # 1. Parse PDF (synchronous SDK call — offload to thread pool)
     try:
-        parser = DocumentParser()
+        parser = create_parser()
         loop = asyncio.get_running_loop()
         parse_result = await loop.run_in_executor(None, parser.parse_file, pdf_path)
     except FileNotFoundError as exc:

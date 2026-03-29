@@ -18,7 +18,7 @@ from doc_parser.config import configure_logging, get_settings
 from doc_parser.ingestion.embedder import embed_chunks, get_embedder
 from doc_parser.ingestion.image_captioner import enrich_image_chunks
 from doc_parser.ingestion.vector_store import QdrantDocumentStore
-from doc_parser.pipeline import DocumentParser
+from doc_parser.pipeline import create_parser
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ def _collect_files(input_path: Path) -> list[Path]:
 
 async def _ingest_file(
     file_path: Path,
-    parser: DocumentParser,
+    parser: object,
     store: QdrantDocumentStore,
     caption_enabled: bool,
     max_chunk_tokens: int,
@@ -168,7 +168,7 @@ async def main() -> None:
     if not file_paths:
         return
 
-    parser = DocumentParser()
+    parser = create_parser()
     store = QdrantDocumentStore(settings)
 
     # Ensure collection exists (or recreate it)

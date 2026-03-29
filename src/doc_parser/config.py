@@ -17,8 +17,10 @@ class Settings(BaseSettings):
     )
 
     # Parser backend
-    parser_backend: str = "cloud"  # "cloud" | "ollama"
+    parser_backend: str = "cloud"  # "cloud" | "ollama" | "chandra"
     z_ai_api_key: SecretStr | None = None
+    chandra_torch_device: str | None = None  # "mps" (Apple Silicon) | "cuda" | "cpu"
+
     log_level: str = "INFO"
     output_dir: str = "./output"
     config_yaml_path: str = "config.yaml"
@@ -71,9 +73,11 @@ class Settings(BaseSettings):
         elif self.parser_backend == "ollama":
             if self.config_yaml_path == "config.yaml":
                 self.config_yaml_path = "ollama/config.yaml"
+        elif self.parser_backend == "chandra":
+            pass  # uses HuggingFace local inference; no API key or YAML needed
         else:
             raise ValueError(
-                f"PARSER_BACKEND must be 'cloud' or 'ollama', got: {self.parser_backend!r}"
+                f"PARSER_BACKEND must be 'cloud', 'ollama', or 'chandra', got: {self.parser_backend!r}"
             )
         return self
 
