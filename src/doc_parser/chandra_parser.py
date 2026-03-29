@@ -97,12 +97,13 @@ class ChandraParser:
         logger.info("ChandraParser: parsing file: %s", file_path)
 
         # Load all pages as PIL images (chandra handles PDF rendering and DPI)
-        page_images = self._load_file(str(file_path))
+        page_images = self._load_file(str(file_path), {})
         total_pages = len(page_images)
         logger.info("ChandraParser: %d pages loaded from %s", total_pages, file_path.name)
 
-        # One BatchInputItem per page
-        batch = [self._BatchInputItem(image=img) for img in page_images]
+        # One BatchInputItem per page — "ocr_layout" returns structured HTML
+        # with data-label / data-bbox attributes needed to build ParsedElements
+        batch = [self._BatchInputItem(image=img, prompt_type="ocr_layout") for img in page_images]
 
         # Run OCR via HuggingFace (model loaded locally via transformers)
         logger.debug("ChandraParser: running HF inference on %d pages", total_pages)
