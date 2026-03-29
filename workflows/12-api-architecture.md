@@ -22,7 +22,7 @@ flowchart LR
 
     Ingest -->|"parse→chunk\n→enrich→embed→upsert"| OAICl & StDep & EmbDep
     Search -->|"embed query\n→ hybrid search\n→ rerank"| StDep & EmbDep & RerDep
-    Generate -->|"search+rerank\n→ context\n→ GPT-4o"| OAICl & StDep & EmbDep & RerDep
+    Generate -->|"search+rerank\n→ context\n→ GPT-5.4-mini "| OAICl & StDep & EmbDep & RerDep
 
     subgraph Schemas["api/schemas.py — Pydantic models"]
         IReq["IngestRequest\nfile_path: str\ncollection: str | None\noverwrite: bool\nmax_chunk_tokens: int\ncaption: bool"]

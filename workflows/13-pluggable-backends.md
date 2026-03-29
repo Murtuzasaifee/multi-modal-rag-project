@@ -22,7 +22,7 @@ flowchart TD
 
     subgraph RF["get_reranker(settings)  —  RERANKER_BACKEND"]
         RChk{RERANKER_BACKEND}
-        RChk -->|openai| OR["OpenAIReranker\ngpt-4o-mini\nMultimodal: ✓  (vision)\nCloud API\nRequires: OPENAI_API_KEY"]
+        RChk -->|openai| OR["OpenAIReranker\ngpt-5.4-mini -mini\nMultimodal: ✓  (vision)\nCloud API\nRequires: OPENAI_API_KEY"]
         RChk -->|jina| JR["JinaReranker\njina-reranker-m0\nMultimodal: ✓\nCloud API\nRequires: JINA_API_KEY"]
         RChk -->|bge| BR["BGEReranker\nbge-reranker-v2-minicpm-layerwise\nMultimodal: ✗  (caption text only)\nLocal  —  install: uv pip install -e '.[bge]'\nDevice: MPS or CPU"]
         RChk -->|qwen| QR["QwenVLReranker\nQwen3-VL-Reranker-2B\nMultimodal: ✓  (image_base64)\nLocal  —  install: uv pip install -e '.[qwen]'\nDevice: MPS or CPU"]

@@ -6,7 +6,7 @@
 flowchart TD
     In["query: str\ncandidates: list[dict]\ntop_n: int"] --> Factory["get_reranker(settings)\nRERANKER_BACKEND env var"]
 
-    Factory -->|openai| OAI["OpenAIReranker\nmodel: gpt-4o-mini\ncloud · multimodal"]
+    Factory -->|openai| OAI["OpenAIReranker\nmodel: gpt-5.4-mini -mini\ncloud · multimodal"]
     Factory -->|jina| Jina["JinaReranker\nmodel: jina-reranker-m0\ncloud · multimodal"]
     Factory -->|bge| BGE["BGEReranker\nbge-reranker-v2-minicpm-layerwise\nlocal · text-only · fast"]
     Factory -->|qwen| Qwen["QwenVLReranker\nQwen3-VL-Reranker-2B\nlocal · multimodal · slow"]
@@ -14,7 +14,7 @@ flowchart TD
     subgraph OAIBlock["OpenAIReranker — _score_one() × N via asyncio.gather"]
         OAITxt["text chunk:\nmessages=[{role:user,\n  content: query + chunk.text}]"]
         OAIImg["image chunk (image_base64 set):\nmessages=[{role:user,\n  content:[\n    {type:text, text:query},\n    {type:image_url,\n     image_url:{url:data:image/png;base64,...}}\n  ]}]"]
-        OAICall["chat.completions.create\n(gpt-4o-mini)\n→ parse float from response\ncost: ~$0.03–0.10 / 20 candidates"]
+        OAICall["chat.completions.create\n(gpt-5.4-mini -mini)\n→ parse float from response\ncost: ~$0.03–0.10 / 20 candidates"]
         OAITxt & OAIImg --> OAICall
     end
 

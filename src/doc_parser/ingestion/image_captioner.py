@@ -466,10 +466,10 @@ async def enrich_chunks(
     chunks: list[Chunk],
     pdf_path: Path,
     client: AsyncOpenAI,
-    model: str = "gpt-4o",
+    model: str = "gpt-5.4-mini ",
     max_concurrent: int = 5,
 ) -> list[Chunk]:
-    """Enrich all non-text chunks with GPT-4o generated structured descriptions.
+    """Enrich all non-text chunks with GPT-5.4-mini  generated structured descriptions.
 
     Dispatches by modality:
     - image   → structured TYPE / CAPTION / DETAIL / STRUCTURE description (vision call
@@ -487,7 +487,7 @@ async def enrich_chunks(
         chunks: All chunks from the document (mixed modalities).
         pdf_path: Path to the source PDF (used for image crop rendering).
         client: Authenticated AsyncOpenAI client.
-        model: OpenAI model to use for enrichment (default "gpt-4o").
+        model: OpenAI model to use for enrichment (default "gpt-5.4-mini ").
         max_concurrent: Max concurrent API calls (shared semaphore across all modalities).
 
     Returns:

@@ -1,6 +1,6 @@
 # System Overview
 
-The pipeline has four sequential phases. Phase 1 (Parse) converts raw documents into structured elements using GLM-OCR and PP-DocLayout-V3. Phase 2 (Ingest) chunks, enriches, embeds, and stores those elements in Qdrant. Phase 3 (Retrieve) runs hybrid dense+sparse search with optional reranking. Phase 4 (Generate) builds a context string from retrieved chunks and calls GPT-4o.
+The pipeline has four sequential phases. Phase 1 (Parse) converts raw documents into structured elements using GLM-OCR and PP-DocLayout-V3. Phase 2 (Ingest) chunks, enriches, embeds, and stores those elements in Qdrant. Phase 3 (Retrieve) runs hybrid dense+sparse search with optional reranking. Phase 4 (Generate) builds a context string from retrieved chunks and calls GPT-5.4-mini .
 
 ```mermaid
 flowchart TD
@@ -12,7 +12,7 @@ flowchart TD
 
     subgraph Phase2["Phase 2 — Ingest"]
         ParseResult --> Chunker["document_aware_chunking()\nlist[Chunk]"]
-        Chunker --> Enricher["enrich_chunks()\nGPT-4o vision / JSON mode"]
+        Chunker --> Enricher["enrich_chunks()\nGPT-5.4-mini  vision / JSON mode"]
         Enricher --> Embedder["embed_chunks()\ndense + sparse vectors"]
         Embedder --> Qdrant[("Qdrant\ntext_dense · bm25_sparse")]
     end
@@ -25,7 +25,7 @@ flowchart TD
 
     subgraph Phase4["Phase 4 — Generate"]
         Reranker --> ContextBuilder["Build context string\n[page N] chunk.text ..."]
-        ContextBuilder --> GPT4o["GPT-4o\nchat.completions.create()"]
+        ContextBuilder --> GPT4o["GPT-5.4-mini \nchat.completions.create()"]
         GPT4o --> Answer["LLM Answer\n+ source chunks"]
     end
 

@@ -1,6 +1,6 @@
 # Ingestion Pipeline
 
-Triggered by `POST /ingest` or `scripts/ingest.py`. A single document travels through five stages: synchronous parsing (offloaded to a thread executor in async contexts), structure-aware chunking, per-modality GPT-4o enrichment (controlled by `asyncio.Semaphore`), dual dense+sparse embedding, and batched upsert to Qdrant.
+Triggered by `POST /ingest` or `scripts/ingest.py`. A single document travels through five stages: synchronous parsing (offloaded to a thread executor in async contexts), structure-aware chunking, per-modality GPT-5.4-mini  enrichment (controlled by `asyncio.Semaphore`), dual dense+sparse embedding, and batched upsert to Qdrant.
 
 ```mermaid
 flowchart LR
@@ -12,9 +12,9 @@ flowchart LR
 
     Chunker --> Enrich["enrich_chunks()\nasyncio.Semaphore\nmax_concurrent=5"]
 
-    Enrich --> |"modality=image"| GPT4oVision["GPT-4o vision\ncrop bbox → base64 PNG\n→ TYPE / CAPTION /\nDETAIL / STRUCTURE"]
-    Enrich --> |"modality=table"| GPT4oJSON["GPT-4o JSON mode\nraw HTML table\n→ markdown table\n+ semantic summary"]
-    Enrich --> |"modality=formula\nor algorithm"| GPT4oText["GPT-4o text\n→ verbal / semantic\ndescription"]
+    Enrich --> |"modality=image"| GPT4oVision["GPT-5.4-mini  vision\ncrop bbox → base64 PNG\n→ TYPE / CAPTION /\nDETAIL / STRUCTURE"]
+    Enrich --> |"modality=table"| GPT4oJSON["GPT-5.4-mini  JSON mode\nraw HTML table\n→ markdown table\n+ semantic summary"]
+    Enrich --> |"modality=formula\nor algorithm"| GPT4oText["GPT-5.4-mini  text\n→ verbal / semantic\ndescription"]
     Enrich --> |"modality=text"| Pass["unchanged"]
 
     GPT4oVision & GPT4oJSON & GPT4oText & Pass --> Enriched["Enriched list[Chunk]\nchunk.text = embed text\nchunk.caption = gen text\nchunk.image_base64 = PNG"]
