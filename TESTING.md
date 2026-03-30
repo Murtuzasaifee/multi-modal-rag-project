@@ -606,6 +606,74 @@ curl -X POST http://localhost:8000/search \
 
 ---
 
+## Section 4 — dots.mocr Backend
+
+dots.mocr uses `rednote-hilab/dots.mocr` (3B Qwen-VL model) served locally via vLLM.
+
+### Prerequisites
+
+**1. Install vLLM and fix NumPy/SciPy compatibility (if not already done):**
+
+```bash
+pip install vllm
+pip install --upgrade scipy
+```
+
+**2. Install the dots_mocr client library:**
+
+```bash
+pip install git+https://github.com/rednote-hilab/dots.mocr.git
+```
+
+**3. Configure `.env`:**
+
+```dotenv
+PARSER_BACKEND=mocr
+MOCR_HOST=localhost
+MOCR_PORT=8002
+```
+
+---
+
+### Start the vLLM server
+
+```bash
+vllm serve rednote-hilab/dots.mocr \
+    --served-model-name model \
+    --trust-remote-code \
+    --chat-template-content-format string \
+    --port 8002
+```
+
+> **Note:** `--served-model-name model` is required — the dots_mocr client looks for a model named `model` on the vLLM endpoint. Port 8002 avoids conflicts with the API server (8000) and Chandra OCR (8001).
+
+Wait until the server logs `Application startup complete` before running any parse commands.
+
+---
+
+### Parse a document with dots.mocr
+
+```bash
+uv run python scripts/parse.py data/raw/test_page1.pdf --chunks
+```
+
+**Ingest into Qdrant:**
+
+```bash
+uv run python scripts/ingest.py data/raw/test_page1.pdf --no-caption
+```
+
+**Expected logs (success):**
+
+```
+MocrParser initialized, endpoint: http://localhost:8002/v1
+MocrParser: parsing file: test_page1.pdf
+MocrParser: 1 pages loaded from test_page1.pdf
+MocrParser: parsed test_page1.pdf: 1 pages, 10 elements
+```
+
+---
+
 ## Common Errors and Fixes
 
 | Error | Cause | Fix |

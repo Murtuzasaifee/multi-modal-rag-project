@@ -260,12 +260,12 @@ class DocumentParser:
 
 
 def create_parser() -> DocumentParser:
-    """Return the configured parser backend based on PARSER_BACKEND setting.
-
-    Returns a ChandraParser when PARSER_BACKEND=chandra, otherwise
-    a DocumentParser (cloud or ollama).
-    """
-    if get_settings().parser_backend == "chandra":
+    """Return the configured parser backend based on PARSER_BACKEND setting."""
+    backend = get_settings().parser_backend
+    if backend == "chandra":
         from doc_parser.chandra_parser import ChandraParser  # lazy import
         return ChandraParser()  # type: ignore[return-value]
+    if backend == "mocr":
+        from doc_parser.mocr_parser import MocrParser  # lazy import
+        return MocrParser()  # type: ignore[return-value]
     return DocumentParser()

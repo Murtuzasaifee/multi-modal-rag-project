@@ -17,10 +17,15 @@ class Settings(BaseSettings):
     )
 
     # Parser backend
-    parser_backend: str = "cloud"  # "cloud" | "ollama" | "chandra"
+    parser_backend: str = "cloud"  # "cloud" | "ollama" | "chandra" | "mocr"
     z_ai_api_key: SecretStr | None = None
+    
     chandra_host: str = "localhost"
     chandra_port: int = 8001
+    
+    mocr_host: str = "localhost"
+    mocr_port: int = 8002
+    
     log_level: str = "INFO"
     output_dir: str = "./output"
     config_yaml_path: str = "config.yaml"
@@ -74,10 +79,12 @@ class Settings(BaseSettings):
             if self.config_yaml_path == "config.yaml":
                 self.config_yaml_path = "ollama/config.yaml"
         elif self.parser_backend == "chandra":
-            pass  # uses HuggingFace local inference; no API key or YAML needed
+            pass  # uses vLLM local inference; no API key or YAML needed
+        elif self.parser_backend == "mocr":
+            pass  # uses vLLM local inference; no API key or YAML needed
         else:
             raise ValueError(
-                f"PARSER_BACKEND must be 'cloud', 'ollama', or 'chandra', got: {self.parser_backend!r}"
+                f"PARSER_BACKEND must be 'cloud', 'ollama', 'chandra', or 'mocr', got: {self.parser_backend!r}"
             )
         return self
 
