@@ -44,9 +44,9 @@ gemini = [
 chandra = [
     "chandra-ocr[hf]>=0.1.0",
 ]
-mocr = [
-    "dots-mocr @ git+https://github.com/rednote-hilab/dots.mocr.git",
-]
+# dots-mocr cannot be declared here — it pins transformers==4.57.6 which conflicts
+# with glmocr[layout]'s requirement of transformers>=5.3.0. Install manually:
+#   uv pip install git+https://github.com/rednote-hilab/dots.mocr.git --no-deps
 layout = [
     "glmocr[layout]",
     "torch>=2.10",
