@@ -612,15 +612,23 @@ dots.mocr uses `rednote-hilab/dots.mocr` (3B Qwen-VL model) served locally via v
 
 ### Prerequisites
 
-**1. Install all dependencies (vLLM, dots_mocr, scipy included):**
+> **Why two environments?** vLLM requires `numpy<2.3` (via `numba`), but this project requires `numpy>=2.4.4`. Since vLLM is a standalone inference server (not imported by project code), it must run in its own dedicated Python environment.
+
+**Environment 1 — Project client (uv):**
 
 ```bash
 uv pip install -e ".[mocr]"
 ```
 
-> **Note:** `pyproject.toml` uses `[tool.uv].override-dependencies` to force `transformers>=5.3.0`, overriding the strict pin in `dots-mocr`. `scipy>=1.11.0` and `vllm>=0.17.0` are included in the `[mocr]` extras group — no separate installs needed.
+**Environment 2 — vLLM inference server (separate venv):**
 
-**2. Configure `.env`:**
+```bash
+uv venv .venv-vllm --python 3.12
+source .venv-vllm/bin/activate
+uv pip install vllm>=0.17.0
+```
+
+**Configure `.env`:**
 
 ```dotenv
 PARSER_BACKEND=mocr
@@ -632,7 +640,10 @@ MOCR_PORT=8002
 
 ### Start the vLLM server
 
+Activate the vLLM environment and start the server:
+
 ```bash
+source .venv-vllm/bin/activate
 vllm serve rednote-hilab/dots.mocr \
     --served-model-name model \
     --trust-remote-code \

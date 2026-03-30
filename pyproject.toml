@@ -44,11 +44,9 @@ gemini = [
 ]
 chandra = [
     "chandra-ocr[hf]>=0.1.0",
-    "vllm>=0.17.0",
 ]
 mocr = [
     "dots-mocr @ git+https://github.com/rednote-hilab/dots.mocr.git",
-    "vllm>=0.17.0",
 ]
 layout = [
     "glmocr[layout]",
