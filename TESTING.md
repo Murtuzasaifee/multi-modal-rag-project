@@ -606,6 +606,76 @@ curl -X POST http://localhost:8000/search \
 
 ---
 
+## Section 3 — Chandra OCR Backend
+
+Chandra OCR uses `datalab-to/chandra-ocr-2` served locally via vLLM. Inference runs at ~1-2 seconds/page on an L4 GPU.
+
+### Prerequisites
+
+**1. Install vLLM and fix NumPy/SciPy compatibility:**
+
+```bash
+pip install vllm
+pip install --upgrade scipy   # fixes numpy 2.x / scipy incompatibility
+```
+
+**2. Install the chandra-ocr client library:**
+
+```bash
+uv pip install -e ".[chandra]"
+```
+
+**3. Configure `.env`:**
+
+```dotenv
+PARSER_BACKEND=chandra
+CHANDRA_HOST=localhost
+CHANDRA_PORT=8001
+```
+
+---
+
+### Start the vLLM server
+
+```bash
+vllm serve datalab-to/chandra-ocr-2 --served-model-name chandra --port 8001
+```
+
+> **Note:** `--served-model-name chandra` is required — the chandra-ocr client library looks for a model named `chandra` on the vLLM endpoint.
+
+Wait until the server logs `Application startup complete` before running any parse commands.
+
+---
+
+### Parse a document with Chandra OCR
+
+```bash
+uv run python scripts/parse.py data/raw/test_page1.pdf --chunks
+```
+
+**Parse and write output to a custom directory:**
+
+```bash
+uv run python scripts/parse.py data/raw/test_page1.pdf --output ./output/ --chunks
+```
+
+**Ingest into Qdrant:**
+
+```bash
+uv run python scripts/ingest.py data/raw/test_page1.pdf --no-caption
+```
+
+**Expected logs (success):**
+
+```
+ChandraParser initialized, endpoint: http://localhost:8001/v1
+ChandraParser: parsing file: test_page1.pdf
+ChandraParser: 1 pages loaded from test_page1.pdf
+ChandraParser: parsed test_page1.pdf: 1 pages, 10 elements
+```
+
+---
+
 ## Common Errors and Fixes
 
 | Error | Cause | Fix |
