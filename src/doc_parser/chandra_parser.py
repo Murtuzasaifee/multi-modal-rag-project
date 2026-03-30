@@ -67,8 +67,7 @@ class ChandraParser:
         vllm serve datalab-to/chandra-ocr-2 --served-model-name chandra --port 8001
 
     Install:
-        uv pip install vllm                # server
-        uv pip install -e ".[chandra]"     # chandra-ocr client library
+        uv pip install -e ".[chandra]"     # installs vllm + chandra-ocr client library
 
     Example:
         parser = ChandraParser()

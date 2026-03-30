@@ -96,8 +96,7 @@ class MocrParser:
             --port 8002
 
     Install:
-        uv pip install vllm                                                          # server
-        uv pip install git+https://github.com/rednote-hilab/dots.mocr.git --no-deps  # client
+        uv pip install -e ".[mocr]"   # installs vllm + dots_mocr (transformer conflict resolved via uv override)
 
     Example:
         parser = MocrParser()
@@ -112,7 +111,7 @@ class MocrParser:
         except ImportError:
             raise ImportError(
                 "dots_mocr package is required. "
-                "Install with: uv pip install git+https://github.com/rednote-hilab/dots.mocr.git --no-deps"
+                "Install with: uv pip install -e '.[mocr]'"
             )
 
         import fitz  # PyMuPDF — already a project dependency

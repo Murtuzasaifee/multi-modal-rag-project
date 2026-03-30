@@ -612,22 +612,15 @@ dots.mocr uses `rednote-hilab/dots.mocr` (3B Qwen-VL model) served locally via v
 
 ### Prerequisites
 
-**1. Install vLLM and fix NumPy/SciPy compatibility (if not already done):**
+**1. Install all dependencies (vLLM, dots_mocr, scipy included):**
 
 ```bash
-uv pip install vllm
-uv pip install --upgrade scipy
+uv pip install -e ".[mocr]"
 ```
 
-**2. Install the dots_mocr client library:**
+> **Note:** `pyproject.toml` uses `[tool.uv].override-dependencies` to force `transformers>=5.3.0`, overriding the strict pin in `dots-mocr`. `scipy>=1.11.0` and `vllm>=0.17.0` are included in the `[mocr]` extras group — no separate installs needed.
 
-```bash
-uv pip install git+https://github.com/rednote-hilab/dots.mocr.git --no-deps
-```
-
-> **Note:** `--no-deps` is required because `dots-mocr` pins `transformers==4.57.6` which conflicts with `glmocr[layout]`'s requirement of `transformers>=5.3.0`. The installed transformers version is compatible at runtime.
-
-**3. Configure `.env`:**
+**2. Configure `.env`:**
 
 ```dotenv
 PARSER_BACKEND=mocr

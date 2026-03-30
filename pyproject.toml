@@ -22,6 +22,7 @@ dependencies = [
     "loguru>=0.7.0",
     "python-multipart>=0.0.20",
     "numpy>=2.4.4",
+    "scipy>=1.11.0",
 ]
 
 [project.optional-dependencies]
@@ -43,10 +44,12 @@ gemini = [
 ]
 chandra = [
     "chandra-ocr[hf]>=0.1.0",
+    "vllm>=0.17.0",
 ]
-# dots-mocr cannot be declared here — it pins transformers==4.57.6 which conflicts
-# with glmocr[layout]'s requirement of transformers>=5.3.0. Install manually:
-#   uv pip install git+https://github.com/rednote-hilab/dots.mocr.git --no-deps
+mocr = [
+    "dots-mocr @ git+https://github.com/rednote-hilab/dots.mocr.git",
+    "vllm>=0.17.0",
+]
 layout = [
     "glmocr[layout]",
     "torch>=2.10",
@@ -55,6 +58,13 @@ layout = [
     "sentencepiece>=0.2",
     "accelerate>=1.13",
     "opencv-python>=4.10.0",
+]
+
+[tool.uv]
+override-dependencies = [
+    # dots-mocr pins transformers==4.57.6 but glmocr[layout] needs >=5.3.0.
+    # Override to use the newer version — dots-mocr is runtime-compatible with it.
+    "transformers>=5.3.0",
 ]
 
 [tool.ruff]
