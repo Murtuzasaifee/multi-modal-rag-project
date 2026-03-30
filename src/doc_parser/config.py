@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     # Parser backend
     parser_backend: str = "cloud"  # "cloud" | "ollama" | "chandra"
     z_ai_api_key: SecretStr | None = None
+    chandra_host: str = "localhost"
+    chandra_port: int = 8001
     log_level: str = "INFO"
     output_dir: str = "./output"
     config_yaml_path: str = "config.yaml"

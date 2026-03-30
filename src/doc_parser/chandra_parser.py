@@ -1,12 +1,12 @@
-"""Chandra OCR parser backend using the chandra-ocr library with HuggingFace."""
+"""Chandra OCR parser backend using the chandra-ocr library with vLLM."""
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 
 from tqdm import tqdm
 
+from doc_parser.config import get_settings
 from doc_parser.pipeline import ParsedElement, PageResult, ParseResult
 
 logger = logging.getLogger(__name__)
@@ -59,12 +59,16 @@ def _output_to_page(output, page_num: int) -> PageResult:
 
 
 class ChandraParser:
-    """Document parser using Chandra OCR via HuggingFace local inference.
+    """Document parser using Chandra OCR via a local vLLM server.
 
-    Processes each page individually (batch_size=1) to keep peak VRAM bounded.
-    Uses CUDA for GPU inference. Processes pages one at a time to keep peak VRAM bounded.
+    Requires vLLM >= 0.17.0 (first version supporting Qwen3_5ForConditionalGeneration).
 
-    Install: uv pip install -e ".[chandra]"
+    Start the server before use:
+        vllm serve datalab-to/chandra-ocr-2 --served-model-name chandra --port 8001
+
+    Install:
+        pip install vllm            # server
+        uv pip install -e "[chandra]"  # chandra-ocr client library
 
     Example:
         parser = ChandraParser()
@@ -73,34 +77,25 @@ class ChandraParser:
     """
 
     def __init__(self) -> None:
-        # Set before importing chandra — its Settings singleton reads os.environ
-        # at import time. TORCH_DEVICE avoids device_map="auto" disk-offloading.
-        # sdpa (Scaled Dot Product Attention) is built into PyTorch 2.0+ — no extra
-        # package needed. On L4 (Ada) PyTorch automatically dispatches sdpa to the
-        # same fused FlashAttention kernel, giving equivalent speed and memory savings.
-        os.environ["TORCH_DEVICE"] = "cuda"
-        os.environ["TORCH_ATTN"] = "sdpa"
-
         try:
             from chandra.input import load_file
             from chandra.model import InferenceManager
             from chandra.model.schema import BatchInputItem
         except ImportError:
             raise ImportError(
-                "chandra-ocr[hf] package is required. "
+                "chandra-ocr package is required. "
                 "Install with: uv pip install -e '.[chandra]'"
             )
 
+        settings = get_settings()
         self._load_file = load_file
         self._BatchInputItem = BatchInputItem
-        self._manager = InferenceManager(method="hf")
-        logger.info("ChandraParser initialized (cuda, sdpa)")
+        self._manager = InferenceManager(method="vllm")
+        self._vllm_api_base = f"http://{settings.chandra_host}:{settings.chandra_port}/v1"
+        logger.info("ChandraParser initialized, endpoint: %s", self._vllm_api_base)
 
     def parse_file(self, file_path: str | Path) -> ParseResult:
         """Parse a single PDF or image file.
-
-        Pages are processed one at a time to bound peak VRAM — no cross-page
-        padding or simultaneous activation memory.
 
         Args:
             file_path: Path to the document to parse (PDF or image).
@@ -118,17 +113,17 @@ class ChandraParser:
         total_pages = len(page_images)
         logger.info("ChandraParser: %d pages loaded from %s", total_pages, file_path.name)
 
-        pages: list[PageResult] = []
-        for page_idx, img in enumerate(page_images):
-            page_num = page_idx + 1
-            logger.debug("ChandraParser: processing page %d/%d", page_num, total_pages)
+        batch = [
+            self._BatchInputItem(image=img, prompt_type="ocr_layout")
+            for img in page_images
+        ]
 
-            # One page at a time — eliminates padding across pages and keeps
-            # peak activation memory to a single page's footprint
-            item = self._BatchInputItem(image=img, prompt_type="ocr_layout")
-            output = self._manager.generate(batch=[item])[0]
-            pages.append(_output_to_page(output, page_num))
+        logger.debug(
+            "ChandraParser: sending %d pages to vLLM at %s", total_pages, self._vllm_api_base
+        )
+        outputs = self._manager.generate(batch=batch, vllm_api_base=self._vllm_api_base)
 
+        pages = [_output_to_page(output, idx + 1) for idx, output in enumerate(outputs)]
         total_elements = sum(len(p.elements) for p in pages)
         full_markdown = "\n\n".join(p.markdown for p in pages if p.markdown)
 
