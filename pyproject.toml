@@ -45,9 +45,7 @@ gemini = [
 chandra = [
     "chandra-ocr[hf]>=0.1.0",
 ]
-mocr = [
-    "dots-mocr @ git+https://github.com/rednote-hilab/dots.mocr.git",
-]
+# dots-mocr cannot be declared here — it must be installed via git clone (see TESTING.md)
 layout = [
     "glmocr[layout]",
     "torch>=2.10",

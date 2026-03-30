@@ -617,15 +617,22 @@ dots.mocr uses `rednote-hilab/dots.mocr` (3B Qwen-VL model) served locally via v
 **Environment 1 — Project client (uv):**
 
 ```bash
-uv pip install -e ".[mocr]"
+# Install base project dependencies
+uv pip install -e "." --python .venv
+
+# Install dots_mocr via git clone — installing from git URL omits subpackages, editable local install is required
+git clone https://github.com/rednote-hilab/dots.mocr.git /tmp/dots-mocr
+uv pip install -e /tmp/dots-mocr --no-deps --python .venv
 ```
+
+> **Note:** `--no-deps` bypasses dots-mocr's `transformers==4.57.6` pin which conflicts with `glmocr[layout]`'s `transformers>=5.3.0`. The installed transformers is runtime-compatible.
 
 **Environment 2 — vLLM inference server (separate venv):**
 
 ```bash
 uv venv .venv-vllm --python 3.12
 source .venv-vllm/bin/activate
-uv pip install vllm>=0.17.0
+uv pip install "vllm>=0.17.0"
 ```
 
 **Configure `.env`:**

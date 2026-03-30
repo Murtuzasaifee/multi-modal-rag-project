@@ -96,11 +96,12 @@ class MocrParser:
             --port 8002
 
     Install (client env):
-        uv pip install -e ".[mocr]"          # dots_mocr client (transformers conflict resolved via uv override)
+        git clone https://github.com/rednote-hilab/dots.mocr.git /tmp/dots-mocr
+        uv pip install -e /tmp/dots-mocr --no-deps --python .venv
 
     Install (server env — separate venv, vllm conflicts with numpy>=2.4.4):
         uv venv .venv-vllm --python 3.12 && source .venv-vllm/bin/activate
-        uv pip install vllm>=0.17.0
+        uv pip install "vllm>=0.17.0"
 
     Example:
         parser = MocrParser()
@@ -123,9 +124,10 @@ class MocrParser:
         settings = get_settings()
         self._inference = inference_with_vllm
         self._prompt = dict_promptmode_to_prompt[_PROMPT_MODE]
-        self._api_base = f"http://{settings.mocr_host}:{settings.mocr_port}/v1"
+        self._mocr_ip = settings.mocr_host
+        self._mocr_port = settings.mocr_port
         self._fitz = fitz
-        logger.info("MocrParser initialized, endpoint: %s", self._api_base)
+        logger.info("MocrParser initialized, endpoint: http://%s:%s", self._mocr_ip, self._mocr_port)
 
     def _to_pil_images(self, file_path: Path):
         """Convert a PDF or image file to a list of PIL Images."""
@@ -161,18 +163,20 @@ class MocrParser:
         total_pages = len(images)
         logger.info("MocrParser: %d pages loaded from %s", total_pages, file_path.name)
 
-        logger.debug("MocrParser: sending %d pages to vLLM at %s", total_pages, self._api_base)
-        outputs = self._inference(
-            images=images,
-            prompt_mode=_PROMPT_MODE,
-            api_base=self._api_base,
-            model_name="model",
-        )
+        logger.debug("MocrParser: sending %d pages to vLLM at %s:%s", total_pages, self._mocr_ip, self._mocr_port)
 
         pages: list[PageResult] = []
-        for idx, (raw, img) in enumerate(zip(outputs, images)):
+        for idx, img in enumerate(images):
+            raw = self._inference(
+                image=img,
+                prompt=self._prompt,
+                ip=self._mocr_ip,
+                port=self._mocr_port,
+                model_name="model",
+            ) or ""
             elements, markdown = _parse_output(raw, img.size)
             pages.append(PageResult(page_num=idx + 1, elements=elements, markdown=markdown))
+            logger.debug("MocrParser: page %d done, %d elements", idx + 1, len(elements))
 
         total_elements = sum(len(p.elements) for p in pages)
         full_markdown = "\n\n".join(p.markdown for p in pages if p.markdown)
