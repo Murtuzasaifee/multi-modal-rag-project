@@ -62,7 +62,7 @@ class ChandraParser:
     """Document parser using Chandra OCR via HuggingFace local inference.
 
     Processes each page individually (batch_size=1) to keep peak VRAM bounded.
-    Uses CUDA with flash_attention_2 for optimal throughput on GPU.
+    Uses CUDA for GPU inference. Processes pages one at a time to keep peak VRAM bounded.
 
     Install: uv pip install -e ".[chandra]"
 
@@ -74,11 +74,12 @@ class ChandraParser:
 
     def __init__(self) -> None:
         # Set before importing chandra — its Settings singleton reads os.environ
-        # at import time. TORCH_DEVICE avoids device_map="auto" disk-offloading;
-        # flash_attention_2 halves attention memory and improves throughput on
-        # Ampere+ GPUs (L4, A10, A100, H100).
+        # at import time. TORCH_DEVICE avoids device_map="auto" disk-offloading.
+        # sdpa (Scaled Dot Product Attention) is built into PyTorch 2.0+ — no extra
+        # package needed. On L4 (Ada) PyTorch automatically dispatches sdpa to the
+        # same fused FlashAttention kernel, giving equivalent speed and memory savings.
         os.environ["TORCH_DEVICE"] = "cuda"
-        os.environ["TORCH_ATTN"] = "flash_attention_2"
+        os.environ["TORCH_ATTN"] = "sdpa"
 
         try:
             from chandra.input import load_file
@@ -93,7 +94,7 @@ class ChandraParser:
         self._load_file = load_file
         self._BatchInputItem = BatchInputItem
         self._manager = InferenceManager(method="hf")
-        logger.info("ChandraParser initialized (cuda, flash_attention_2)")
+        logger.info("ChandraParser initialized (cuda, sdpa)")
 
     def parse_file(self, file_path: str | Path) -> ParseResult:
         """Parse a single PDF or image file.
