@@ -21,6 +21,7 @@ dependencies = [
     "uvicorn[standard]>=0.34.0",
     "loguru>=0.7.0",
     "python-multipart>=0.0.20",
+    "numpy>=2.4.4",
 ]
 
 [project.optional-dependencies]
