@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 from tqdm import tqdm
 
-import os
-
-from doc_parser.config import get_settings
 from doc_parser.pipeline import ParsedElement, PageResult, ParseResult
 
 logger = logging.getLogger(__name__)
@@ -37,12 +35,36 @@ _LABEL_MAP: dict[str, str] = {
 _SKIP_LABELS: frozenset[str] = frozenset({"Page-Header", "Page-Footer", "Blank-Page"})
 
 
+def _output_to_page(output, page_num: int) -> PageResult:
+    """Convert a single BatchOutputItem to a PageResult."""
+    elements: list[ParsedElement] = []
+    for chunk in output.chunks or []:
+        chandra_label = chunk.get("label", "Text")
+        if chandra_label in _SKIP_LABELS:
+            continue
+        label = _LABEL_MAP.get(chandra_label, "paragraph")
+        # bbox_scale defaults to 1000 — normalise to [0, 1]
+        raw_bbox = chunk.get("bbox", [0, 0, 1000, 1000])
+        bbox = [v / 1000.0 for v in raw_bbox]
+        elements.append(
+            ParsedElement(
+                label=label,
+                text=chunk.get("content", ""),
+                bbox=bbox,
+                score=1.0,
+                reading_order=len(elements),
+            )
+        )
+    return PageResult(page_num=page_num, elements=elements, markdown=output.markdown or "")
+
+
 class ChandraParser:
     """Document parser using Chandra OCR via HuggingFace local inference.
 
-    Uses the chandra-ocr library's InferenceManager(method="hf") to load
-    and run datalab-to/chandra-ocr-2 directly via transformers — no server needed.
-    Install the extra dependency with: uv pip install -e ".[chandra]"
+    Processes each page individually (batch_size=1) to keep peak VRAM bounded.
+    Uses CUDA with flash_attention_2 for optimal throughput on GPU.
+
+    Install: uv pip install -e ".[chandra]"
 
     Example:
         parser = ChandraParser()
@@ -51,13 +73,12 @@ class ChandraParser:
     """
 
     def __init__(self) -> None:
-        settings = get_settings()
-
-        # Set TORCH_DEVICE before importing chandra so its settings singleton
-        # picks it up. Without this, device_map="auto" causes accelerate to
-        # attempt disk offloading when RAM is insufficient (e.g. on Apple Silicon).
-        if settings.chandra_torch_device:
-            os.environ["TORCH_DEVICE"] = settings.chandra_torch_device
+        # Set before importing chandra — its Settings singleton reads os.environ
+        # at import time. TORCH_DEVICE avoids device_map="auto" disk-offloading;
+        # flash_attention_2 halves attention memory and improves throughput on
+        # Ampere+ GPUs (L4, A10, A100, H100).
+        os.environ["TORCH_DEVICE"] = "cuda"
+        os.environ["TORCH_ATTN"] = "flash_attention_2"
 
         try:
             from chandra.input import load_file
@@ -72,23 +93,19 @@ class ChandraParser:
         self._load_file = load_file
         self._BatchInputItem = BatchInputItem
         self._manager = InferenceManager(method="hf")
-        logger.info(
-            "ChandraParser initialized (HuggingFace backend, device: %s)",
-            settings.chandra_torch_device or "auto",
-        )
+        logger.info("ChandraParser initialized (cuda, flash_attention_2)")
 
     def parse_file(self, file_path: str | Path) -> ParseResult:
         """Parse a single PDF or image file.
+
+        Pages are processed one at a time to bound peak VRAM — no cross-page
+        padding or simultaneous activation memory.
 
         Args:
             file_path: Path to the document to parse (PDF or image).
 
         Returns:
             ParseResult with structured elements and assembled Markdown.
-
-        Raises:
-            FileNotFoundError: If the file does not exist.
-            ImportError: If chandra-ocr is not installed.
         """
         file_path = Path(file_path)
         if not file_path.exists():
@@ -96,57 +113,27 @@ class ChandraParser:
 
         logger.info("ChandraParser: parsing file: %s", file_path)
 
-        # Load all pages as PIL images (chandra handles PDF rendering and DPI)
         page_images = self._load_file(str(file_path), {})
         total_pages = len(page_images)
         logger.info("ChandraParser: %d pages loaded from %s", total_pages, file_path.name)
 
-        # One BatchInputItem per page — "ocr_layout" returns structured HTML
-        # with data-label / data-bbox attributes needed to build ParsedElements
-        batch = [self._BatchInputItem(image=img, prompt_type="ocr_layout") for img in page_images]
-
-        # Run OCR via HuggingFace (model loaded locally via transformers)
-        logger.debug("ChandraParser: running HF inference on %d pages", total_pages)
-        outputs = self._manager.generate(batch=batch)
-
         pages: list[PageResult] = []
-        for page_idx, output in enumerate(outputs):
+        for page_idx, img in enumerate(page_images):
             page_num = page_idx + 1
-            logger.debug(
-                "ChandraParser: processing output for page %d/%d", page_num, total_pages
-            )
+            logger.debug("ChandraParser: processing page %d/%d", page_num, total_pages)
 
-            elements: list[ParsedElement] = []
-            for chunk in output.chunks or []:
-                chandra_label = chunk.get("label", "Text")
-                if chandra_label in _SKIP_LABELS:
-                    continue
-                label = _LABEL_MAP.get(chandra_label, "paragraph")
-                # bbox_scale defaults to 1000 — normalise to [0, 1]
-                raw_bbox = chunk.get("bbox", [0, 0, 1000, 1000])
-                bbox = [v / 1000.0 for v in raw_bbox]
-                elements.append(
-                    ParsedElement(
-                        label=label,
-                        text=chunk.get("content", ""),
-                        bbox=bbox,
-                        score=1.0,
-                        reading_order=len(elements),
-                    )
-                )
-
-            pages.append(
-                PageResult(page_num=page_num, elements=elements, markdown=output.markdown or "")
-            )
+            # One page at a time — eliminates padding across pages and keeps
+            # peak activation memory to a single page's footprint
+            item = self._BatchInputItem(image=img, prompt_type="ocr_layout")
+            output = self._manager.generate(batch=[item])[0]
+            pages.append(_output_to_page(output, page_num))
 
         total_elements = sum(len(p.elements) for p in pages)
         full_markdown = "\n\n".join(p.markdown for p in pages if p.markdown)
 
         logger.info(
             "ChandraParser: parsed %s: %d pages, %d elements",
-            file_path.name,
-            len(pages),
-            total_elements,
+            file_path.name, len(pages), total_elements,
         )
         return ParseResult(
             source_file=str(file_path),
@@ -156,15 +143,7 @@ class ChandraParser:
         )
 
     def parse_batch(self, file_paths: list[Path], output_dir: Path) -> list[ParseResult]:
-        """Parse multiple files with progress tracking.
-
-        Args:
-            file_paths: List of paths to documents to parse.
-            output_dir: Directory to save output files.
-
-        Returns:
-            List of ParseResult objects, one per input file.
-        """
+        """Parse multiple files with progress tracking."""
         output_dir.mkdir(parents=True, exist_ok=True)
         results: list[ParseResult] = []
         for fp in tqdm(file_paths, desc="Parsing documents", unit="file"):
