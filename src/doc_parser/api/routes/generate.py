@@ -127,7 +127,7 @@ async def generate(req: GenerateRequest) -> GenerateResponse:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": _build_user_content(context, req.query, candidates)},
             ],
-            max_completion_tokens=req.max_tokens,
+            max_completion_tokens=req.max_completion_tokens,
             temperature=0.0,
         )
         answer = completion.choices[0].message.content or ""
