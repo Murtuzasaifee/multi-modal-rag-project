@@ -94,7 +94,8 @@ services:
     volumes:
       - huggingface_cache:/root/.cache/huggingface
     command: >
-      --model Qwen/Qwen3-VL-8B-Instruct --port 8000 --dtype bfloat16 --gpu-memory-utilization 0.45 --max-model-len 32768 --mm-encoder-tp-mode data --limit-mm-per-prompt image=10
+      --model Qwen/Qwen3-VL-8B-Instruct  --port 8000 --dtype bfloat16  --gpu-memory-utilization 0.84  --max-model-len 8192  --mm-encoder-tp-mode data 
+    #      --limit-mm-per-prompt image=10
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
       interval: 30s
@@ -120,7 +121,8 @@ services:
     volumes:
       - huggingface_cache:/root/.cache/huggingface
     command: >
-      --model Qwen/Qwen3-VL-8B-Instruct-FP8 --quantization awq --port 8000 --dtype bfloat16 --gpu-memory-utilization 0.40 --max-model-len 32768 --mm-encoder-tp-mode data --limit-mm-per-prompt image=10
+      --model Qwen/Qwen3-VL-8B-Instruct-FP8 --quantization awq --port 8000 --dtype bfloat16 --gpu-memory-utilization 0.50 --max-model-len 8192 --mm-encoder-tp-mode data 
+    #			--limit-mm-per-prompt image=10
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
       interval: 30s
