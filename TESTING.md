@@ -139,7 +139,7 @@ Done! Output saved to output
 
 ### `scripts/ingest.py` — Ingest a document into Qdrant
 
-Parses a document, captions image chunks (GPT-4o), embeds all chunks, and upserts them into the Qdrant vector store.
+Parses a document, captions image chunks (GPT-5.4-mini ), embeds all chunks, and upserts them into the Qdrant vector store.
 
 **Ingest a single PDF:**
 

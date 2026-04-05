@@ -29,7 +29,7 @@ def _build_user_content(
     query: str,
     candidates: list[dict],
 ) -> "str | list[dict]":
-    """Build the user message content for GPT-4o.
+    """Build the user message content for GPT-5.4-mini .
 
     Returns a plain string when no candidates carry image_base64 (text-only
     path, identical to previous behaviour). Returns a multimodal content list
@@ -58,12 +58,12 @@ def _build_user_content(
 
 @router.post("", response_model=GenerateResponse)
 async def generate(req: GenerateRequest) -> GenerateResponse:
-    """Retrieve relevant chunks and generate an answer with GPT-4o.
+    """Retrieve relevant chunks and generate an answer with GPT-5.4-mini .
 
     1. Embed query → hybrid search in Qdrant.
     2. Optionally rerank candidates.
     3. Build context string from top-n chunks.
-    4. Call GPT-4o and return answer + source chunks.
+    4. Call GPT-5.4-mini  and return answer + source chunks.
     """
     settings = get_settings()
     store = get_store()
@@ -127,7 +127,7 @@ async def generate(req: GenerateRequest) -> GenerateResponse:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": _build_user_content(context, req.query, candidates)},
             ],
-            max_tokens=req.max_tokens,
+            max_completion_tokens=req.max_tokens,
             temperature=0.0,
         )
         answer = completion.choices[0].message.content or ""

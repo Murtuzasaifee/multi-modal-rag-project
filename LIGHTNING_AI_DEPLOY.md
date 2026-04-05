@@ -77,7 +77,7 @@ EMBEDDING_DIMENSIONS=3072
 RERANKER_BACKEND=openai
 
 # LLM
-OPENAI_LLM_MODEL=gpt-4o
+OPENAI_LLM_MODEL=gpt-5.4-mini 
 ```
 
 Save and exit (`Ctrl+O`, `Enter`, `Ctrl+X` for nano).
@@ -190,12 +190,12 @@ Expected response:
 Enriched chunks are saved to `data/chunks/paper.json` for inspection.
 
 > **What happens during enrichment (with `caption=true`):**
-> - **Image** chunks: cropped from PDF → GPT-4o vision → structured description + `image_base64` stored
-> - **Table** chunks: OCR text → GPT-4o JSON mode → full markdown table + summary + `image_base64` stored
-> - **Formula** chunks: LaTeX text → GPT-4o → verbal description + `image_base64` stored
-> - **Algorithm** chunks: pseudocode text → GPT-4o → semantic description + `image_base64` stored
+> - **Image** chunks: cropped from PDF → GPT-5.4-mini  vision → structured description + `image_base64` stored
+> - **Table** chunks: OCR text → GPT-5.4-mini  JSON mode → full markdown table + summary + `image_base64` stored
+> - **Formula** chunks: LaTeX text → GPT-5.4-mini  → verbal description + `image_base64` stored
+> - **Algorithm** chunks: pseudocode text → GPT-5.4-mini  → semantic description + `image_base64` stored
 >
-> All four visual modalities now store a base64-encoded PNG crop of their PDF region alongside their text caption. This enables the `/generate` endpoint to pass actual visuals to GPT-4o during answer generation (not just text descriptions).
+> All four visual modalities now store a base64-encoded PNG crop of their PDF region alongside their text caption. This enables the `/generate` endpoint to pass actual visuals to GPT-5.4-mini  during answer generation (not just text descriptions).
 >
 > **Cost note:** Each visual chunk makes one additional OpenAI call during ingestion for the text caption. The image crops are stored in Qdrant at ~50–300 KB per chunk (PNG encoded as base64).
 
@@ -241,12 +241,12 @@ curl -X POST http://localhost:8000/generate \
   }'
 ```
 
-The generate endpoint is **multimodal**: after reranking, any retrieved chunk that has a stored `image_base64` (image, table, formula, or algorithm) is passed to GPT-4o as an inline vision block alongside the text context. GPT-4o reads both the written descriptions and the actual visual content before generating the answer.
+The generate endpoint is **multimodal**: after reranking, any retrieved chunk that has a stored `image_base64` (image, table, formula, or algorithm) is passed to GPT-5.4-mini  as an inline vision block alongside the text context. GPT-5.4-mini  reads both the written descriptions and the actual visual content before generating the answer.
 
 - If no visual chunks are in the top-N results, the call falls back to text-only (same behaviour as before).
 - The response `sources` list includes `image_base64` for each visual chunk so clients can render them.
 
-> **Cost note:** Each `/generate` call with visual chunks in the results sends those images to GPT-4o. OpenAI charges vision tokens per image (roughly 85–300 tokens per crop at 150 dpi). A typical query returning 5 chunks with 2–3 visuals adds ~300–500 extra input tokens.
+> **Cost note:** Each `/generate` call with visual chunks in the results sends those images to GPT-5.4-mini . OpenAI charges vision tokens per image (roughly 85–300 tokens per crop at 150 dpi). A typical query returning 5 chunks with 2–3 visuals adds ~300–500 extra input tokens.
 
 > **Re-ingestion required for existing data:** Chunks ingested before this change do not have `image_base64` stored for table/formula/algorithm modalities (only image chunks had it). To get full multimodal generation for all visual types, delete the collection and re-ingest:
 > ```bash

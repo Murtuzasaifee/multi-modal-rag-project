@@ -1,5 +1,5 @@
 """Multimodal chunk enricher: generates structured descriptions for images, tables,
-formulas, and algorithms via GPT-4o to improve embedding quality for retrieval."""
+formulas, and algorithms via GPT-5.4-mini  to improve embedding quality for retrieval."""
 from __future__ import annotations
 
 import asyncio
@@ -102,7 +102,7 @@ Use the variable names and terminology from the algorithm itself.\
 # ── Response parsers ──────────────────────────────────────────────────────────
 
 def _parse_image_response(text: str) -> tuple[str, str]:
-    """Return (short_caption, full_structured_text) from a GPT-4o image response."""
+    """Return (short_caption, full_structured_text) from a GPT-5.4-mini  image response."""
     caption = ""
     for line in text.splitlines():
         stripped = line.strip()
@@ -276,7 +276,7 @@ async def _enrich_image_single(
                     {"role": "system", "content": _IMAGE_SYSTEM_PROMPT},
                     {"role": "user", "content": user_content},
                 ],
-                max_tokens=_IMAGE_MAX_TOKENS,
+                max_completion_tokens=_IMAGE_MAX_TOKENS,
                 temperature=0.0,
             )
 
@@ -330,7 +330,7 @@ async def _enrich_table_single(
                         ),
                     },
                 ],
-                max_tokens=_TABLE_MAX_TOKENS,
+                max_completion_tokens=_TABLE_MAX_TOKENS,
                 temperature=0.0,
                 response_format={"type": "json_object"},
             )
@@ -398,7 +398,7 @@ async def _retry_table_extraction(
                     ),
                 },
             ],
-            max_tokens=_TABLE_MAX_TOKENS,
+            max_completion_tokens=_TABLE_MAX_TOKENS,
             temperature=0.0,
             response_format={"type": "json_object"},
         )
@@ -433,7 +433,7 @@ async def _enrich_formula_single(
                         ),
                     },
                 ],
-                max_tokens=350,
+                max_completion_tokens=350,
                 temperature=0.0,
             )
 
@@ -479,7 +479,7 @@ async def _enrich_algorithm_single(
                         ),
                     },
                 ],
-                max_tokens=450,
+                max_completion_tokens=450,
                 temperature=0.0,
             )
 
@@ -509,10 +509,10 @@ async def enrich_chunks(
     chunks: list[Chunk],
     pdf_path: Path,
     client: AsyncOpenAI,
-    model: str = "gpt-4o",
+    model: str = "gpt-5.4-mini ",
     max_concurrent: int = 5,
 ) -> list[Chunk]:
-    """Enrich all non-text chunks with GPT-4o generated structured descriptions.
+    """Enrich all non-text chunks with GPT-5.4-mini  generated structured descriptions.
 
     Dispatches by modality:
     - image   → structured TYPE / CAPTION / DETAIL / STRUCTURE description (vision call
@@ -530,7 +530,7 @@ async def enrich_chunks(
         chunks: All chunks from the document (mixed modalities).
         pdf_path: Path to the source PDF (used for image crop rendering).
         client: Authenticated AsyncOpenAI client.
-        model: OpenAI model to use for enrichment (default "gpt-4o").
+        model: OpenAI model to use for enrichment (default "gpt-5.4-mini ").
         max_concurrent: Max concurrent API calls (shared semaphore across all modalities).
 
     Returns:

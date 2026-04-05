@@ -69,7 +69,7 @@ It understands **23 document element categories** — titles, paragraphs, tables
 | 🌐 | **Cloud or local** | Z.AI MaaS cloud API **or** fully local via Ollama (`PARSER_BACKEND=ollama`) |
 | 🖼️ | **Multimodal ingestion** | GPT-5.4-mini captions every figure/image chunk — images become searchable text |
 | 🔍 | **Hybrid search** | Dense + sparse (BM25) vectors fused with RRF in Qdrant |
-| 🎯 | **4 re-ranker backends** | OpenAI GPT-4o-mini · Jina M0 (cloud) · BGE (local, fast) · Qwen VL (local, multimodal) |
+| 🎯 | **4 re-ranker backends** | OpenAI GPT-5.4-mini -mini · Jina M0 (cloud) · BGE (local, fast) · Qwen VL (local, multimodal) |
 | 🔌 | **Pluggable embeddings** | OpenAI `text-embedding-3-large/small` or Google Gemini |
 | ⚡ | **Async-first** | All I/O paths use `AsyncOpenAI` + `AsyncQdrantClient` |
 | 🛡️ | **Type-safe config** | Pydantic-settings — every env var validated at startup |
@@ -330,7 +330,7 @@ GEMINI_API_KEY=AIzaSy...
 
 | Backend | Type | Multimodal | Cost | Latency | Extra |
 |---------|------|-----------|------|---------|-------|
-| `openai` *(default)* | GPT-4o-mini cross-encoder | ✅ Vision | ~$0.03–0.10/q | 800ms–2s | — |
+| `openai` *(default)* | GPT-5.4-mini -mini cross-encoder | ✅ Vision | ~$0.03–0.10/q | 800ms–2s | — |
 | `jina` | Jina Reranker M0 | ✅ Qwen2-VL | ~$0.01–0.02/q | 500ms–2s | `JINA_API_KEY` |
 | `bge` | BAAI/bge-reranker-v2-minicpm | ✗ (uses captions) | Free | **50–100ms** | `.[bge]` |
 | `qwen` | Qwen3-VL-Reranker-2B (local) | ✅ Raw images | Free | 400–800ms | `.[qwen]` |

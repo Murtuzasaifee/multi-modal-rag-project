@@ -8,7 +8,7 @@ Pipeline position:
     LLM generation
 
 Supported backends (controlled by ``RERANKER_BACKEND`` env var):
-    - ``openai``  – GPT-4o-mini as async cross-encoder (default, no extra deps)
+    - ``openai``  – GPT-5.4-mini -mini as async cross-encoder (default, no extra deps)
     - ``jina``    – Jina Reranker M0 cloud API (multimodal, needs JINA_API_KEY)
     - ``bge``     – BAAI/bge-reranker-v2-minicpm-layerwise (local, fast, text-only)
     - ``qwen``    – Qwen3-VL-Reranker-2B (local, multimodal, heavier)
@@ -66,7 +66,7 @@ class BaseReranker(ABC):
 
 
 class OpenAIReranker(BaseReranker):
-    """Re-rank using GPT-4o-mini as an async cross-encoder.
+    """Re-rank using GPT-5.4-mini -mini as an async cross-encoder.
 
     Scores each (query, chunk) pair via a short prompt, firing all candidates
     in parallel with ``asyncio.gather``.  Image chunks pass ``image_base64``
