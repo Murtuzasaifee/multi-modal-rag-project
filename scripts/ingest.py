@@ -42,7 +42,7 @@ def _parse_args() -> argparse.Namespace:
         "--no-captions",
         action="store_true",
         default=False,
-        help="Skip GPT-5.4-mini image captioning (faster, text-only ingestion).",
+        help="Skip GPT-4o image captioning (faster, text-only ingestion).",
     )
     parser.add_argument(
         "--collection",

@@ -24,46 +24,14 @@ _DEFAULT_SYSTEM_PROMPT = (
 )
 
 
-def _build_user_content(
-    context: str,
-    query: str,
-    candidates: list[dict],
-) -> "str | list[dict]":
-    """Build the user message content for GPT-5.4-mini .
-
-    Returns a plain string when no candidates carry image_base64 (text-only
-    path, identical to previous behaviour). Returns a multimodal content list
-    when at least one visual chunk has image_base64 populated, interleaving
-    the text context with inline base64 image blocks.
-    """
-    visual_chunks = [c for c in candidates if c.get("image_base64")]
-
-    if not visual_chunks:
-        return f"Context:\n{context}\n\nQuestion: {query}"
-
-    content: list[dict] = [
-        {"type": "text", "text": f"Context:\n{context}\n\nQuestion: {query}"},
-    ]
-    for c in visual_chunks:
-        b64 = c["image_base64"]
-        modality = c.get("modality", "visual")
-        page = c.get("page", "?")
-        content.append({"type": "text", "text": f"[page {page}] {modality.capitalize()} visual:"})
-        content.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:image/png;base64,{b64}"},
-        })
-    return content
-
-
 @router.post("", response_model=GenerateResponse)
 async def generate(req: GenerateRequest) -> GenerateResponse:
-    """Retrieve relevant chunks and generate an answer with GPT-5.4-mini .
+    """Retrieve relevant chunks and generate an answer with GPT-4o.
 
     1. Embed query → hybrid search in Qdrant.
     2. Optionally rerank candidates.
     3. Build context string from top-n chunks.
-    4. Call GPT-5.4-mini  and return answer + source chunks.
+    4. Call GPT-4o and return answer + source chunks.
     """
     settings = get_settings()
     store = get_store()
@@ -100,34 +68,66 @@ async def generate(req: GenerateRequest) -> GenerateResponse:
             c.setdefault("rerank_score", None)
         candidates = candidates[:top_n]
 
-    # Build context string from retrieved chunks — modality-aware so the
-    # generation LLM sees full table data, not just the retrieval summary.
-    context_parts: list[str] = []
+    # Build modality-aware context.
+    # - Text/formula/algorithm chunks: plain text in a single context string.
+    # - Image chunks with base64: injected as image_url blocks so the VLM sees pixels.
+    # - Table chunks: full markdown text + table image (if available) for maximum fidelity.
+    text_context_parts: list[str] = []
+    visual_parts: list[dict] = []
+
     for c in candidates:
         page = c.get("page", "?")
         modality = c.get("modality", "text")
+        b64 = c.get("image_base64")
+
         if modality == "table":
             caption = c.get("caption") or ""
             summary = c.get("text") or ""
             if caption and summary:
-                text = f"{summary}\n\nFull table data:\n{caption}"
+                table_text = f"{summary}\n\nFull table data:\n{caption}"
             else:
-                text = caption or summary
+                table_text = caption or summary
+            text_context_parts.append(f"[page {page}, table]\n{table_text}")
+            if b64:
+                visual_parts.append({"type": "text", "text": f"[page {page}, table image:]"})
+                visual_parts.append(
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}}
+                )
+
+        elif modality == "image" and b64:
+            label = c.get("text") or "[figure]"
+            visual_parts.append({"type": "text", "text": f"[page {page}, figure: {label}]"})
+            visual_parts.append(
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}}
+            )
+
         else:
             text = c.get("text", "") or c.get("caption") or ""
-        context_parts.append(f"[page {page}] {text}")
-    context = "\n\n".join(context_parts)
+            text_context_parts.append(f"[page {page}] {text}")
 
+    text_context = "\n\n".join(text_context_parts)
     system_prompt = req.system_prompt or _DEFAULT_SYSTEM_PROMPT
+
+    # Use multimodal message content when visuals are present; fall back to
+    # plain string for text-only documents (avoids unnecessary overhead).
+    if visual_parts:
+        preamble = f"Context:\n{text_context}" if text_context else "Context: (see images/tables below)"
+        user_content: str | list[dict] = (
+            [{"type": "text", "text": preamble}]
+            + visual_parts
+            + [{"type": "text", "text": f"\nQuestion: {req.query}"}]
+        )
+    else:
+        user_content = f"Context:\n{text_context}\n\nQuestion: {req.query}"
 
     try:
         completion = await client.chat.completions.create(
             model=settings.openai_llm_model,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": _build_user_content(context, req.query, candidates)},
+                {"role": "user", "content": user_content},
             ],
-            max_completion_tokens=req.max_completion_tokens,
+            max_tokens=req.max_tokens,
             temperature=0.0,
         )
         answer = completion.choices[0].message.content or ""
@@ -149,7 +149,6 @@ async def generate(req: GenerateRequest) -> GenerateResponse:
             is_atomic=c.get("is_atomic", False),
             caption=c.get("caption"),
             rerank_score=c.get("rerank_score"),
-            image_base64=c.get("image_base64"),
         )
         for c in candidates
     ]

@@ -42,7 +42,7 @@ def _save_chunks_to_disk(
         out_path = _CHUNKS_OUTPUT_DIR / f"{stem}.json"
 
         records = []
-        for chunk, d_emb, s_emb in zip(chunks, dense, sparse):
+        for chunk, d_emb, s_emb in zip(chunks, dense, sparse, strict=True):
             records.append({
                 "chunk_id": chunk.chunk_id,
                 "page": chunk.page,
@@ -153,11 +153,18 @@ _SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".pdf", ".png", ".jpg", ".jpe
 
 @router.post("/file", response_model=IngestResponse, summary="Ingest document via file upload")
 async def ingest_file(
-    file: UploadFile = File(..., description="Document file to ingest (PDF or image)."),
+    file: UploadFile = File(..., description="Document file to ingest (PDF or image)."),  # noqa: B008
     collection: str | None = Form(None, description="Override collection name. Leave blank to use the default from QDRANT_COLLECTION_NAME env var.", example=None),
     overwrite: bool = Form(False, description="Recreate collection before ingesting."),
     max_chunk_tokens: int = Form(512, ge=64, le=4096, description="Max tokens per chunk."),
-    caption: bool = Form(True, description="Run GPT-5.4-mini captioning on image chunks."),
+    caption: bool = Form(
+        True,
+        description=(
+            "Run enrich_chunks(): crops image regions and stores them for direct visual "
+            "embedding (no LLM call for images); generates a text description via the "
+            "configured LLM for table, formula, and algorithm chunks."
+        ),
+    ),
 ) -> IngestResponse:
     """Upload a PDF or image file and ingest it into the vector store."""
     suffix = Path(file.filename).suffix.lower() if file.filename else ""

@@ -26,6 +26,7 @@ def _make_settings(
     openai_secret = MagicMock()
     openai_secret.get_secret_value.return_value = openai_key
     settings.openai_api_key = openai_secret
+    settings.openai_base_url = None
     # jina_api_key
     if jina_key is not None:
         jina_secret = MagicMock()
@@ -341,7 +342,7 @@ class TestBGEReranker:
         """BGE reranker should return at most top_n results."""
         from doc_parser.retrieval.reranker import BGEReranker
 
-        settings = _make_settings(backend="bge")
+        _make_settings(backend="bge")
 
         mock_reranker = MagicMock()
         mock_reranker.compute_score.return_value = [0.9, 0.3, 0.7, 0.1, 0.5]

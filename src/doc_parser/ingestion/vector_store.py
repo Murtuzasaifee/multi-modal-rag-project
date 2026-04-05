@@ -32,11 +32,11 @@ class QdrantDocumentStore:
     """Async wrapper around Qdrant for hybrid-search document ingestion and retrieval.
 
     Uses two named vector spaces:
-    - ``text_dense``: 3072-dim OpenAI text-embedding-3-large (COSINE distance)
+    - ``multimodal_dense``: dense embeddings for both text and image chunks (COSINE distance)
     - ``bm25_sparse``: BM25 sparse vectors from fastembed
     """
 
-    def __init__(self, settings: "Settings") -> None:
+    def __init__(self, settings: Settings) -> None:
         """Initialise the store from application settings.
 
         Args:
@@ -75,7 +75,7 @@ class QdrantDocumentStore:
         await self._client.create_collection(
             collection_name=self._collection,
             vectors_config={
-                "text_dense": VectorParams(
+                "multimodal_dense": VectorParams(
                     size=self._settings.embedding_dimensions,
                     distance=Distance.COSINE,
                     hnsw_config=HnswConfigDiff(m=16, ef_construct=100),
@@ -107,7 +107,7 @@ class QdrantDocumentStore:
 
     async def upsert_chunks(
         self,
-        chunks: list["Chunk"],
+        chunks: list[Chunk],
         dense_embeddings: list[list[float]],
         sparse_vectors: list[SparseVector],
         batch_size: int = 64,
@@ -130,7 +130,7 @@ class QdrantDocumentStore:
             )
 
         points: list[PointStruct] = []
-        for chunk, dense, sparse in zip(chunks, dense_embeddings, sparse_vectors):
+        for chunk, dense, sparse in zip(chunks, dense_embeddings, sparse_vectors, strict=True):
             payload = {
                 "text": chunk.text,
                 "chunk_id": chunk.chunk_id,
@@ -146,7 +146,7 @@ class QdrantDocumentStore:
             points.append(
                 PointStruct(
                     id=str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk.chunk_id)),
-                    vector={"text_dense": dense, "bm25_sparse": sparse},
+                    vector={"multimodal_dense": dense, "bm25_sparse": sparse},
                     payload=payload,
                 )
             )
@@ -167,8 +167,8 @@ class QdrantDocumentStore:
     async def search(
         self,
         query_text: str,
-        embedder: "BaseEmbedder",
-        settings: "Settings",
+        embedder: BaseEmbedder,
+        settings: Settings,
         top_k: int = 10,
         filter_modality: str | None = None,
     ) -> list[dict]:
@@ -191,7 +191,7 @@ class QdrantDocumentStore:
 
         query_filter = None
         if filter_modality is not None:
-            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            from qdrant_client.models import FieldCondition, Filter, MatchValue
 
             query_filter = Filter(
                 must=[FieldCondition(key="modality", match=MatchValue(value=filter_modality))]
@@ -200,7 +200,7 @@ class QdrantDocumentStore:
         results = await self._client.query_points(
             collection_name=self._collection,
             prefetch=[
-                Prefetch(query=query_dense, using="text_dense", limit=top_k * 2),
+                Prefetch(query=query_dense, using="multimodal_dense", limit=top_k * 2),
                 Prefetch(query=query_sparse, using="bm25_sparse", limit=top_k * 2),
             ],
             query=FusionQuery(fusion=Fusion.RRF),

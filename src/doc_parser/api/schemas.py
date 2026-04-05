@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-
 # ── Request models ─────────────────────────────────────────────────────────────
 
 
@@ -28,7 +27,14 @@ class IngestRequest(BaseModel):
     collection: str | None = Field(None, description="Override collection name from settings.")
     overwrite: bool = Field(False, description="If True, recreate the collection before ingesting.")
     max_chunk_tokens: int = Field(512, ge=64, le=4096, description="Max tokens per text chunk.")
-    caption: bool = Field(True, description="Run GPT-5.4-mini captioning on image chunks.")
+    caption: bool = Field(
+        True,
+        description=(
+            "Run enrich_chunks(): crops image regions and stores them for direct visual "
+            "embedding (no LLM call for images); generates a text description via the "
+            "configured LLM for table, formula, and algorithm chunks."
+        ),
+    )
 
 
 # ── Response models ────────────────────────────────────────────────────────────
@@ -96,7 +102,7 @@ class GenerateRequest(BaseModel):
     )
     rerank: bool = Field(True, description="If False, use raw Qdrant results.")
     system_prompt: str | None = Field(None, description="Override default RAG system prompt.")
-    max_completion_tokens: int = Field(1024, ge=64, le=4096, description="Max tokens in LLM response.")
+    max_tokens: int = Field(1024, ge=64, le=4096, description="Max tokens in LLM response.")
 
 
 class GenerateResponse(BaseModel):

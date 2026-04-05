@@ -1,11 +1,11 @@
 """GET /health and GET /collections endpoints."""
 from __future__ import annotations
 
-from loguru import logger
 from fastapi import APIRouter
+from loguru import logger
 from openai import AsyncOpenAI
 
-from doc_parser.api.dependencies import get_openai_client, get_reranker_dep, get_store
+from doc_parser.api.dependencies import get_openai_client, get_store
 from doc_parser.api.schemas import CollectionsResponse, DeleteCollectionResponse, HealthResponse
 from doc_parser.config import get_settings
 
@@ -29,18 +29,21 @@ async def health() -> HealthResponse:
         logger.warning("Qdrant health check failed: {}", exc)
         qdrant_status = f"error: {exc}"
 
-    # Check OpenAI (small embedding call)
+    # Check OpenAI embeddings connectivity (skipped for non-OpenAI providers)
     openai_status: str
-    try:
-        await client.embeddings.create(
-            model=settings.embedding_model,
-            input=["ping"],
-            dimensions=8,
-        )
-        openai_status = "ok"
-    except Exception as exc:
-        logger.warning("OpenAI health check failed: {}", exc)
-        openai_status = f"error: {exc}"
+    if settings.embedding_provider.lower() == "openai":
+        try:
+            await client.embeddings.create(
+                model=settings.embedding_model,
+                input=["ping"],
+                dimensions=8,
+            )
+            openai_status = "ok"
+        except Exception as exc:
+            logger.warning("OpenAI health check failed: {}", exc)
+            openai_status = f"error: {exc}"
+    else:
+        openai_status = f"skipped (embedding_provider={settings.embedding_provider})"
 
     overall = "ok" if qdrant_status == "ok" and openai_status == "ok" else "degraded"
     return HealthResponse(

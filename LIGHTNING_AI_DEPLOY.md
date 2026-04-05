@@ -77,7 +77,7 @@ EMBEDDING_DIMENSIONS=3072
 RERANKER_BACKEND=openai
 
 # LLM
-OPENAI_LLM_MODEL=gpt-5.4-mini 
+OPENAI_LLM_MODEL=gpt-4o
 ```
 
 Save and exit (`Ctrl+O`, `Enter`, `Ctrl+X` for nano).
@@ -122,18 +122,11 @@ Expected startup sequence in logs:
 
 ```
 qdrant-1   | ... Qdrant gRPC listening on 6334
-ollama-1   | ... Ollama is running
-app-1      | [warmup] Starting model pre-warm sequence...
-app-1      | [warmup] PP-DocLayoutV3: loading weights onto GPU...
-app-1      | [warmup] PP-DocLayoutV3: ready in 92.3s (NVRTC kernels compiled and cached)
-app-1      | [warmup] GLM-OCR: loading glm-ocr:latest into Ollama VRAM via http://ollama:11434/api/generate ...
-app-1      | [warmup] GLM-OCR: model loaded into GPU VRAM in 18.4s
-app-1      | [warmup] All models hot — handing off to API server
+ollama-1   | ... Listening on 127.0.0.1:11434
 app-1      | ... Starting doc-parser API | parser=ollama | backend=openai | collection=documents
+app-1      | ... PP-DocLayoutV3 weights loading...
 app-1      | ... Application startup complete.
 ```
-
-The warmup step pre-loads both GPU models before the API accepts traffic. This prevents a ~2-minute cold-start penalty on the first ingest request. It only runs when `PARSER_BACKEND=ollama`.
 
 ---
 
@@ -189,16 +182,6 @@ Expected response:
 
 Enriched chunks are saved to `data/chunks/paper.json` for inspection.
 
-> **What happens during enrichment (with `caption=true`):**
-> - **Image** chunks: cropped from PDF → GPT-5.4-mini  vision → structured description + `image_base64` stored
-> - **Table** chunks: OCR text → GPT-5.4-mini  JSON mode → full markdown table + summary + `image_base64` stored
-> - **Formula** chunks: LaTeX text → GPT-5.4-mini  → verbal description + `image_base64` stored
-> - **Algorithm** chunks: pseudocode text → GPT-5.4-mini  → semantic description + `image_base64` stored
->
-> All four visual modalities now store a base64-encoded PNG crop of their PDF region alongside their text caption. This enables the `/generate` endpoint to pass actual visuals to GPT-5.4-mini  during answer generation (not just text descriptions).
->
-> **Cost note:** Each visual chunk makes one additional OpenAI call during ingestion for the text caption. The image crops are stored in Qdrant at ~50–300 KB per chunk (PNG encoded as base64).
-
 ---
 
 ## Step 9 — Search
@@ -240,19 +223,6 @@ curl -X POST http://localhost:8000/generate \
     "max_tokens": 1024
   }'
 ```
-
-The generate endpoint is **multimodal**: after reranking, any retrieved chunk that has a stored `image_base64` (image, table, formula, or algorithm) is passed to GPT-5.4-mini  as an inline vision block alongside the text context. GPT-5.4-mini  reads both the written descriptions and the actual visual content before generating the answer.
-
-- If no visual chunks are in the top-N results, the call falls back to text-only (same behaviour as before).
-- The response `sources` list includes `image_base64` for each visual chunk so clients can render them.
-
-> **Cost note:** Each `/generate` call with visual chunks in the results sends those images to GPT-5.4-mini . OpenAI charges vision tokens per image (roughly 85–300 tokens per crop at 150 dpi). A typical query returning 5 chunks with 2–3 visuals adds ~300–500 extra input tokens.
-
-> **Re-ingestion required for existing data:** Chunks ingested before this change do not have `image_base64` stored for table/formula/algorithm modalities (only image chunks had it). To get full multimodal generation for all visual types, delete the collection and re-ingest:
-> ```bash
-> curl -X DELETE http://localhost:8000/collections/documents
-> # then re-run Step 8 for each PDF
-> ```
 
 ---
 
@@ -340,18 +310,6 @@ docker compose -f docker-compose.gpu.yml up --build app
 
 Qdrant and Ollama do not need rebuilding — only the `app` service changes.
 
-If the change affects ingestion (e.g. how chunks are enriched or what is stored in Qdrant), you will need to delete the collection and re-ingest your PDFs:
-
-```bash
-# Delete existing collection
-curl -X DELETE http://localhost:8000/collections/documents
-
-# Re-ingest each PDF
-curl -X POST http://localhost:8000/ingest/file \
-  -F "file=@data/raw/paper.pdf" \
-  -F "caption=true"
-```
-
 ---
 
 ## Troubleshooting
@@ -364,6 +322,3 @@ curl -X POST http://localhost:8000/ingest/file \
 | `nvidia-smi` fails in container | NVIDIA Container Toolkit not installed | Use a Lightning AI GPU instance (toolkit pre-installed) |
 | Ollama model not found | Model not pulled yet | Run Step 5 again |
 | Port already in use | Another process on 8000/6333 | `docker compose down` then retry |
-| Generate gives text-only answers despite visual chunks in results | Existing Qdrant data lacks `image_base64` for table/formula/algorithm chunks | Delete collection and re-ingest with `caption=true` |
-| `[warmup] PP-DocLayoutV3 skipped` in logs | `[layout]` extra not installed in image | Dockerfile.gpu installs `.[layout]` — ensure you are using `docker-compose.gpu.yml` |
-| Generate response `sources[].image_base64` is null for non-image chunks | Chunk was ingested before multimodal enrichment was added | Re-ingest the PDF |

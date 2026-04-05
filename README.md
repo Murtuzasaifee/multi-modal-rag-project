@@ -37,7 +37,7 @@ It understands **23 document element categories** — titles, paragraphs, tables
                       ▼
 ┌─────────────────────────────────────────────────────┐
 │  Phase 2 · Ingest                                   │
-│  GPT-5.4-mini image captioner  →  enriches figure chunks  │
+│  GPT-4o image captioner  →  enriches figure chunks  │
 │  Pluggable embeddings    →  OpenAI · Gemini         │
 │  BM25 sparse vectors     →  feature hashing         │
 │  Qdrant hybrid store     →  dense + sparse + RRF    │
@@ -67,9 +67,9 @@ It understands **23 document element categories** — titles, paragraphs, tables
 | 📐 | **Layout detection** | PP-DocLayout-V3 — 23 element categories including tables, formulas, figures, algorithms |
 | 🔤 | **OCR + formula recognition** | GLM-OCR 0.9B — text, HTML tables, LaTeX formulas |
 | 🌐 | **Cloud or local** | Z.AI MaaS cloud API **or** fully local via Ollama (`PARSER_BACKEND=ollama`) |
-| 🖼️ | **Multimodal ingestion** | GPT-5.4-mini captions every figure/image chunk — images become searchable text |
+| 🖼️ | **Multimodal ingestion** | GPT-4o captions every figure/image chunk — images become searchable text |
 | 🔍 | **Hybrid search** | Dense + sparse (BM25) vectors fused with RRF in Qdrant |
-| 🎯 | **4 re-ranker backends** | OpenAI GPT-5.4-mini -mini · Jina M0 (cloud) · BGE (local, fast) · Qwen VL (local, multimodal) |
+| 🎯 | **4 re-ranker backends** | OpenAI GPT-4o-mini · Jina M0 (cloud) · BGE (local, fast) · Qwen VL (local, multimodal) |
 | 🔌 | **Pluggable embeddings** | OpenAI `text-embedding-3-large/small` or Google Gemini |
 | ⚡ | **Async-first** | All I/O paths use `AsyncOpenAI` + `AsyncQdrantClient` |
 | 🛡️ | **Type-safe config** | Pydantic-settings — every env var validated at startup |
@@ -196,7 +196,7 @@ python scripts/ingest.py <input> [options]
 | Argument | Default | Description |
 |----------|---------|-------------|
 | `input` | *(required)* | Document file or directory |
-| `--no-captions` | off | Skip GPT-5.4-mini image captioning |
+| `--no-captions` | off | Skip GPT-4o image captioning |
 | `--collection` | from `.env` | Override Qdrant collection name |
 | `--overwrite` | off | Delete and recreate the collection |
 | `--max-chunk-tokens` | `512` | Max tokens per chunk |
@@ -330,7 +330,7 @@ GEMINI_API_KEY=AIzaSy...
 
 | Backend | Type | Multimodal | Cost | Latency | Extra |
 |---------|------|-----------|------|---------|-------|
-| `openai` *(default)* | GPT-5.4-mini -mini cross-encoder | ✅ Vision | ~$0.03–0.10/q | 800ms–2s | — |
+| `openai` *(default)* | GPT-4o-mini cross-encoder | ✅ Vision | ~$0.03–0.10/q | 800ms–2s | — |
 | `jina` | Jina Reranker M0 | ✅ Qwen2-VL | ~$0.01–0.02/q | 500ms–2s | `JINA_API_KEY` |
 | `bge` | BAAI/bge-reranker-v2-minicpm | ✗ (uses captions) | Free | **50–100ms** | `.[bge]` |
 | `qwen` | Qwen3-VL-Reranker-2B (local) | ✅ Raw images | Free | 400–800ms | `.[qwen]` |
@@ -341,7 +341,7 @@ RERANKER_TOP_N=5
 JINA_API_KEY=             # only for jina backend
 ```
 
-> **How image chunks flow:** every image chunk stores both a GPT-5.4-mini caption (text) and `image_base64` (raw PNG). `openai` and `jina` pass the raw image for visual scoring; `bge` uses the caption text; `qwen` decodes and passes the raw image to the local VLM.
+> **How image chunks flow:** every image chunk stores both a GPT-4o caption (text) and `image_base64` (raw PNG). `openai` and `jina` pass the raw image for visual scoring; `bge` uses the caption text; `qwen` decodes and passes the raw image to the local VLM.
 
 ---
 
@@ -521,7 +521,7 @@ All settings are loaded from `.env` via pydantic-settings — validated at start
 | `PARSER_BACKEND` | No | `cloud` | Parser backend: `cloud` (Z.AI MaaS) \| `ollama` (local Ollama) |
 | `Z_AI_API_KEY` | Yes* | — | Z.AI cloud API key (required when `PARSER_BACKEND=cloud`) |
 | `OPENAI_API_KEY` | Yes† | — | OpenAI key — captioning, generation, and embeddings |
-| `OPENAI_LLM_MODEL` | No | `gpt-5.4-mini` | LLM model for generation |
+| `OPENAI_LLM_MODEL` | No | `gpt-4o` | LLM model for generation |
 | `EMBEDDING_PROVIDER` | No | `openai` | `openai` \| `gemini` |
 | `EMBEDDING_MODEL` | No | `text-embedding-3-large` | Embedding model name |
 | `EMBEDDING_DIMENSIONS` | No | `3072` | Vector size (1536 for `text-embedding-3-small`) |
@@ -532,7 +532,7 @@ All settings are loaded from `.env` via pydantic-settings — validated at start
 | `RERANKER_BACKEND` | No | `openai` | `openai` \| `jina` \| `bge` \| `qwen` |
 | `RERANKER_TOP_N` | No | `5` | Results to keep after re-ranking |
 | `JINA_API_KEY` | No | — | Required when `RERANKER_BACKEND=jina` |
-| `IMAGE_CAPTION_ENABLED` | No | `true` | GPT-5.4-mini captioning during ingestion |
+| `IMAGE_CAPTION_ENABLED` | No | `true` | GPT-4o captioning during ingestion |
 | `LOG_LEVEL` | No | `INFO` | `DEBUG` · `INFO` · `WARNING` |
 | `LOG_JSON` | No | `false` | JSON-lines output for log aggregators |
 | `OUTPUT_DIR` | No | `./output` | Default output directory |
@@ -541,7 +541,7 @@ All settings are loaded from `.env` via pydantic-settings — validated at start
 | `API_WORKERS` | No | `1` | Uvicorn worker count |
 
 \* `Z_AI_API_KEY` not required when `PARSER_BACKEND=ollama`
-† `OPENAI_API_KEY` always required for GPT-5.4-mini captioning and re-ranking
+† `OPENAI_API_KEY` always required for GPT-4o captioning and re-ranking
 ‡ `GEMINI_API_KEY` only required when `EMBEDDING_PROVIDER=gemini`; also install `.[gemini]`
 
 ---
@@ -563,7 +563,7 @@ multi-modal-rag/
 │   │
 │   ├── ingestion/
 │   │   ├── embedder.py            # BaseEmbedder + OpenAI/Gemini + BM25
-│   │   ├── image_captioner.py     # GPT-5.4-mini captions for figures
+│   │   ├── image_captioner.py     # GPT-4o captions for figures
 │   │   └── vector_store.py        # Qdrant hybrid search wrapper
 │   │
 │   ├── retrieval/

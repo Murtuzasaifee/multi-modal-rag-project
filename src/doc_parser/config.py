@@ -25,13 +25,15 @@ class Settings(BaseSettings):
 
     # OpenAI
     openai_api_key: SecretStr | None = None
-    openai_llm_model: str = "gpt-5.4-mini"
+    openai_base_url: str | None = None
+    openai_llm_model: str = "gpt-4o"
 
     # Embedding (provider-agnostic)
-    embedding_provider: str = "openai"  # "openai" | "gemini"
+    embedding_provider: str = "openai"  # "openai" | "gemini" | "qwen"
     embedding_model: str = "text-embedding-3-large"
-    embedding_dimensions: int = 3072
+    embedding_dimensions: int = 2048
     gemini_api_key: SecretStr | None = None
+    qwen_embedding_model: str = "Qwen/Qwen3-VL-Embedding-2B"
 
     # Qdrant
     qdrant_url: str = "http://localhost:6333"
@@ -39,11 +41,16 @@ class Settings(BaseSettings):
     qdrant_collection_name: str = "documents"
 
     # Reranker
-    reranker_backend: str = "openai"  # "jina" | "openai" | "bge" | "qwen"
+    reranker_backend: str = "qwen"  # "jina" | "openai" | "bge" | "qwen"
     reranker_top_n: int = 5
     jina_api_key: SecretStr | None = None
 
     # Feature flags
+    # When True, enrich_chunks() is called during ingestion:
+    #   - image chunks: the region is cropped and stored as image_base64 for direct
+    #     visual embedding — no LLM call is made for images.
+    #   - table, formula, and algorithm chunks: a text description is generated via
+    #     the configured LLM (openai_llm_model) to improve retrieval quality.
     image_caption_enabled: bool = True
 
     # Captioning tuning

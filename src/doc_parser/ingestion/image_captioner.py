@@ -1,5 +1,9 @@
-"""Multimodal chunk enricher: generates structured descriptions for images, tables,
-formulas, and algorithms via GPT-5.4-mini  to improve embedding quality for retrieval."""
+"""Multimodal chunk enricher: generates structured descriptions for tables,
+formulas, and algorithms via GPT-4o to improve embedding quality for retrieval.
+
+Image/figure chunks are NOT sent to GPT-4o — instead, the PDF region is cropped and
+stored as ``chunk.image_base64`` for direct visual embedding (e.g. Qwen3-VL-Embedding).
+"""
 from __future__ import annotations
 
 import asyncio
@@ -24,34 +28,8 @@ _MIN_CROP_SIZE_PX: int = 50
 # Table input/output limits
 _TABLE_MAX_INPUT_CHARS: int = 12_000
 _TABLE_MAX_TOKENS: int = 2000
-_IMAGE_MAX_TOKENS: int = 800
 
 # ── Prompts ───────────────────────────────────────────────────────────────────
-
-_IMAGE_SYSTEM_PROMPT = """\
-You are a scientific figure analysis assistant for a document retrieval system.
-
-First, classify the figure into one of these types:
-CHART — bar charts, line graphs, scatter plots, pie charts, heatmaps
-DIAGRAM — flowcharts, architecture diagrams, block diagrams, network diagrams
-PHOTO — photographs, microscopy images, medical scans
-SCREENSHOT — UI screenshots, code screenshots, terminal output
-OTHER — any figure that does not fit the above categories
-
-Then analyze the figure and respond in EXACTLY this format with no extra text:
-
-TYPE: <CHART | DIAGRAM | PHOTO | SCREENSHOT | OTHER>
-CAPTION: <1-2 sentence description of what the figure shows overall — for semantic search.>
-DETAIL:
-- For CHART: describe chart type, all axis labels, data series names, key data points, and the main trend or comparison.
-- For DIAGRAM: describe all components, their labels, connections, and the overall flow or hierarchy.
-- For PHOTO: describe the subject, setting, notable features, and any annotations or labels.
-- For SCREENSHOT: describe the UI elements, visible text, layout, and what operation is shown.
-- For OTHER: describe the key visual components, their arrangement, and purpose.
-STRUCTURE: <Grouping and containment relationships — which components belong to which group or module. Use dashes for sub-items.>
-
-Be specific and technical. Reference labels, numbers, and text visible in the figure. Do not invent information not visible in the figure.\
-"""
 
 _TABLE_SYSTEM_PROMPT = """\
 You are a scientific document analysis assistant for a document retrieval system.
@@ -100,19 +78,6 @@ Use the variable names and terminology from the algorithm itself.\
 
 
 # ── Response parsers ──────────────────────────────────────────────────────────
-
-def _parse_image_response(text: str) -> tuple[str, str]:
-    """Return (short_caption, full_structured_text) from a GPT-5.4-mini  image response."""
-    caption = ""
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("CAPTION:"):
-            caption = stripped[len("CAPTION:"):].strip()
-            break
-    if not caption:
-        caption = text.strip()[:200]
-    return caption, text.strip()
-
 
 def _parse_text_response(raw_original: str, enriched: str) -> tuple[str, str]:
     """Return (original_raw_for_caption, enriched_text_for_embedding)."""
@@ -182,116 +147,39 @@ def _validate_table_extraction(
     return True
 
 
-def _get_surrounding_context(chunks: list[Chunk], idx: int, max_chars: int = 400) -> str:
-    """Extract text from adjacent text chunks for document context.
-
-    Looks up to 2 positions before and after the target chunk,
-    within the same or adjacent pages.
-    """
-    target = chunks[idx]
-    parts: list[str] = []
-
-    # Look backward
-    for i in range(max(0, idx - 2), idx):
-        c = chunks[i]
-        if c.modality == "text" and abs(c.page - target.page) <= 1:
-            parts.append(c.text[:max_chars])
-
-    # Look forward
-    for i in range(idx + 1, min(len(chunks), idx + 3)):
-        c = chunks[i]
-        if c.modality == "text" and abs(c.page - target.page) <= 1:
-            parts.append(c.text[:max_chars])
-
-    combined = " ... ".join(parts)
-    return combined[:max_chars * 2] if combined else ""
-
-
 # ── Per-modality enrichment helpers ──────────────────────────────────────────
 
-def _crop_chunk_to_base64(
-    pdf_path: Path,
-    chunk: Chunk,
-) -> str | None:
-    """Crop the PDF region for a chunk and return a base64-encoded PNG.
+def _crop_image_chunk(chunk: Chunk, pdf_path: Path) -> str | None:
+    """Crop the PDF region for an image chunk and return a base64-encoded PNG string.
 
-    Returns None when bbox is missing or the crop is below the minimum size
-    threshold. Does not raise — callers should treat None as no image available.
+    Returns the base64 string on success, or ``None`` if the crop is too small
+    (likely a detection artefact) or if an error occurs.
     """
-    if chunk.bbox is None:
-        return None
-    page_img = pdf_page_to_image(pdf_path, chunk.page - 1, dpi=150)
-    w, h = page_img.size
-    bbox = chunk.bbox  # normalised 0–1000 coords
-    x1 = int(bbox[0] * w / 1000)
-    y1 = int(bbox[1] * h / 1000)
-    x2 = int(bbox[2] * w / 1000)
-    y2 = int(bbox[3] * h / 1000)
-    crop = page_img.crop((x1, y1, x2, y2))
-    if crop.size[0] < _MIN_CROP_SIZE_PX or crop.size[1] < _MIN_CROP_SIZE_PX:
-        logger.debug(
-            "Skipping tiny crop (%dx%d) for chunk %s",
-            crop.size[0], crop.size[1], chunk.chunk_id,
-        )
-        return None
-    buf = io.BytesIO()
-    crop.save(buf, format="PNG")
-    return base64.b64encode(buf.getvalue()).decode()
+    try:
+        page_img = pdf_page_to_image(pdf_path, chunk.page - 1, dpi=150)
+        w, h = page_img.size
 
+        bbox = chunk.bbox  # normalised 0–1000 coords
+        x1 = int(bbox[0] * w / 1000)
+        y1 = int(bbox[1] * h / 1000)
+        x2 = int(bbox[2] * w / 1000)
+        y2 = int(bbox[3] * h / 1000)
 
-async def _enrich_image_single(
-    chunk: Chunk,
-    pdf_path: Path,
-    client: AsyncOpenAI,
-    semaphore: asyncio.Semaphore,
-    model: str,
-    surrounding_context: str = "",
-) -> None:
-    """Crop the PDF region and generate a structured image description in-place."""
-    async with semaphore:
-        try:
-            b64 = _crop_chunk_to_base64(pdf_path, chunk)
-            if b64 is None:
-                logger.debug("Skipping tiny/missing crop for image chunk %s", chunk.chunk_id)
-                chunk.text = "[figure]"
-                return
-
-            user_content: list[dict] = []
-            if surrounding_context:
-                user_content.append({
-                    "type": "text",
-                    "text": (
-                        f"Surrounding document context (use for reference):\n"
-                        f"{surrounding_context}"
-                    ),
-                })
-            user_content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{b64}"},
-            })
-
-            response = await client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": _IMAGE_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_content},
-                ],
-                max_completion_tokens=_IMAGE_MAX_TOKENS,
-                temperature=0.0,
+        crop = page_img.crop((x1, y1, x2, y2))
+        if crop.size[0] < _MIN_CROP_SIZE_PX or crop.size[1] < _MIN_CROP_SIZE_PX:
+            logger.debug(
+                "Skipping tiny crop (%dx%d) for chunk %s",
+                crop.size[0], crop.size[1], chunk.chunk_id,
             )
+            return None
 
-            raw_response = (response.choices[0].message.content or "").strip()
-            caption, full_text = _parse_image_response(raw_response)
+        buf = io.BytesIO()
+        crop.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode()
 
-            chunk.caption = caption
-            chunk.text = full_text
-            chunk.image_base64 = b64
-
-            logger.debug("Enriched image chunk %s: %s", chunk.chunk_id, caption[:80])
-
-        except Exception:
-            logger.warning("Image enrichment failed for chunk %s", chunk.chunk_id, exc_info=True)
-            chunk.text = "[figure]"
+    except Exception:
+        logger.warning("PDF crop failed for chunk %s", chunk.chunk_id, exc_info=True)
+        return None
 
 
 async def _enrich_table_single(
@@ -330,7 +218,7 @@ async def _enrich_table_single(
                         ),
                     },
                 ],
-                max_completion_tokens=_TABLE_MAX_TOKENS,
+                max_tokens=_TABLE_MAX_TOKENS,
                 temperature=0.0,
                 response_format={"type": "json_object"},
             )
@@ -358,15 +246,6 @@ async def _enrich_table_single(
 
             chunk.caption = caption
             chunk.text = text
-
-            # Also crop and store the visual for multimodal generation
-            if pdf_path is not None and chunk.bbox is not None:
-                try:
-                    chunk.image_base64 = _crop_chunk_to_base64(pdf_path, chunk)
-                except Exception:
-                    logger.warning(
-                        "Table crop failed for chunk %s", chunk.chunk_id, exc_info=True
-                    )
 
             logger.debug("Enriched table chunk %s", chunk.chunk_id)
 
@@ -398,7 +277,7 @@ async def _retry_table_extraction(
                     ),
                 },
             ],
-            max_completion_tokens=_TABLE_MAX_TOKENS,
+            max_tokens=_TABLE_MAX_TOKENS,
             temperature=0.0,
             response_format={"type": "json_object"},
         )
@@ -414,7 +293,6 @@ async def _enrich_formula_single(
     client: AsyncOpenAI,
     semaphore: asyncio.Semaphore,
     model: str,
-    pdf_path: Path | None = None,
 ) -> None:
     """Generate a verbal formula description in-place."""
     async with semaphore:
@@ -433,21 +311,12 @@ async def _enrich_formula_single(
                         ),
                     },
                 ],
-                max_completion_tokens=350,
+                max_tokens=350,
                 temperature=0.0,
             )
 
             enriched = (response.choices[0].message.content or "").strip()
             chunk.caption, chunk.text = _parse_text_response(raw, enriched)
-
-            # Also crop and store the visual for multimodal generation
-            if pdf_path is not None and chunk.bbox is not None:
-                try:
-                    chunk.image_base64 = _crop_chunk_to_base64(pdf_path, chunk)
-                except Exception:
-                    logger.warning(
-                        "Formula crop failed for chunk %s", chunk.chunk_id, exc_info=True
-                    )
 
             logger.debug("Enriched formula chunk %s", chunk.chunk_id)
 
@@ -460,7 +329,6 @@ async def _enrich_algorithm_single(
     client: AsyncOpenAI,
     semaphore: asyncio.Semaphore,
     model: str,
-    pdf_path: Path | None = None,
 ) -> None:
     """Generate a semantic algorithm description in-place."""
     async with semaphore:
@@ -479,21 +347,12 @@ async def _enrich_algorithm_single(
                         ),
                     },
                 ],
-                max_completion_tokens=450,
+                max_tokens=450,
                 temperature=0.0,
             )
 
             enriched = (response.choices[0].message.content or "").strip()
             chunk.caption, chunk.text = _parse_text_response(raw, enriched)
-
-            # Also crop and store the visual for multimodal generation
-            if pdf_path is not None and chunk.bbox is not None:
-                try:
-                    chunk.image_base64 = _crop_chunk_to_base64(pdf_path, chunk)
-                except Exception:
-                    logger.warning(
-                        "Algorithm crop failed for chunk %s", chunk.chunk_id, exc_info=True
-                    )
 
             logger.debug("Enriched algorithm chunk %s", chunk.chunk_id)
 
@@ -509,66 +368,76 @@ async def enrich_chunks(
     chunks: list[Chunk],
     pdf_path: Path,
     client: AsyncOpenAI,
-    model: str = "gpt-5.4-mini ",
+    model: str = "gpt-4o",
     max_concurrent: int = 5,
 ) -> list[Chunk]:
-    """Enrich all non-text chunks with GPT-5.4-mini  generated structured descriptions.
+    """Enrich non-text chunks for improved retrieval quality.
 
     Dispatches by modality:
-    - image   → structured TYPE / CAPTION / DETAIL / STRUCTURE description (vision call
-                with surrounding document context for better understanding)
-    - table   → complete markdown table reproduction + semantic summary (JSON mode)
-    - formula → SUMMARY / DETAIL verbal description (text call)
-    - algorithm → SUMMARY / DETAIL semantic description (text call)
+    - image   → PDF region is cropped and stored as ``chunk.image_base64`` (base64 PNG)
+                for direct visual embedding (e.g. Qwen3-VL-Embedding).  No LLM call is
+                made; ``chunk.caption`` is set to ``None`` and ``chunk.text`` is preserved
+                from the chunker (e.g. figure title) or falls back to ``"[figure]"``.
+    - table   → complete markdown table reproduction + semantic summary (JSON mode, GPT-4o)
+    - formula → SUMMARY / DETAIL verbal description (text call, GPT-4o)
+    - algorithm → SUMMARY / DETAIL semantic description (text call, GPT-4o)
     - text    → unchanged
 
     For tables, ``chunk.caption`` holds the full markdown table (for the generation
     LLM) and ``chunk.text`` holds the semantic summary (for embedding/retrieval).
-    For images, ``chunk.caption`` holds the short 1-2 sentence caption line.
 
     Args:
         chunks: All chunks from the document (mixed modalities).
         pdf_path: Path to the source PDF (used for image crop rendering).
         client: Authenticated AsyncOpenAI client.
-        model: OpenAI model to use for enrichment (default "gpt-5.4-mini ").
+        model: OpenAI model to use for enrichment (default "gpt-4o").
         max_concurrent: Max concurrent API calls (shared semaphore across all modalities).
 
     Returns:
-        The same list mutated in-place with enriched ``text`` and ``caption`` fields.
+        The same list mutated in-place with enriched ``text``, ``caption``, and
+        ``image_base64`` fields.
     """
     semaphore = asyncio.Semaphore(max_concurrent)
     tasks = []
 
     counts: dict[str, int] = defaultdict(int)
 
-    for idx, chunk in enumerate(chunks):
+    for chunk in chunks:
         if chunk.modality == "image":
+            counts["image"] += 1
             if chunk.bbox is not None:
-                context = _get_surrounding_context(chunks, idx)
-                tasks.append(
-                    _enrich_image_single(
-                        chunk, pdf_path, client, semaphore, model,
-                        surrounding_context=context,
-                    )
-                )
-                counts["image"] += 1
+                b64 = _crop_image_chunk(chunk, pdf_path)
+                if b64 is not None:
+                    chunk.image_base64 = b64
+                    chunk.caption = None
+                    if not chunk.text:
+                        chunk.text = "[figure]"
+                    logger.debug("Cropped image chunk %s for visual embedding", chunk.chunk_id)
+                else:
+                    # Crop too small or failed — treat as placeholder
+                    chunk.caption = None
+                    chunk.text = chunk.text or "[figure]"
             else:
                 logger.debug("Image chunk %s has no bbox; setting text='[figure]'", chunk.chunk_id)
-                chunk.text = "[figure]"
+                chunk.caption = None
+                chunk.text = chunk.text or "[figure]"
         elif chunk.modality == "table":
+            # Crop the table region for visual context — generation LLM can see the
+            # actual table layout (merged cells, multi-level headers) alongside the
+            # extracted markdown. Mirrors the image chunk crop pattern.
+            if chunk.bbox is not None:
+                b64 = _crop_image_chunk(chunk, pdf_path)
+                if b64 is not None:
+                    chunk.image_base64 = b64
             tasks.append(
                 _enrich_table_single(chunk, client, semaphore, model, pdf_path=pdf_path)
             )
             counts["table"] += 1
         elif chunk.modality == "formula":
-            tasks.append(
-                _enrich_formula_single(chunk, client, semaphore, model, pdf_path=pdf_path)
-            )
+            tasks.append(_enrich_formula_single(chunk, client, semaphore, model))
             counts["formula"] += 1
         elif chunk.modality == "algorithm":
-            tasks.append(
-                _enrich_algorithm_single(chunk, client, semaphore, model, pdf_path=pdf_path)
-            )
+            tasks.append(_enrich_algorithm_single(chunk, client, semaphore, model))
             counts["algorithm"] += 1
 
     if not tasks:
@@ -577,7 +446,7 @@ async def enrich_chunks(
     await asyncio.gather(*tasks)
 
     logger.info(
-        "Enriched %d image / %d table / %d formula / %d algorithm chunks from %s",
+        "Processed %d image (cropped, no LLM) / %d table / %d formula / %d algorithm chunks from %s",
         counts["image"], counts["table"], counts["formula"], counts["algorithm"],
         pdf_path.name,
     )

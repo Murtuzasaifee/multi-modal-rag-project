@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from openai import AsyncOpenAI
 
-from doc_parser.config import Settings, get_settings
+from doc_parser.config import get_settings
 from doc_parser.ingestion.embedder import BaseEmbedder, get_embedder
 from doc_parser.ingestion.vector_store import QdrantDocumentStore
 from doc_parser.retrieval.reranker import BaseReranker, get_reranker
@@ -16,7 +16,7 @@ def get_openai_client() -> AsyncOpenAI:
     """Return a cached AsyncOpenAI client."""
     settings = get_settings()
     api_key = settings.openai_api_key.get_secret_value() if settings.openai_api_key else None
-    return AsyncOpenAI(api_key=api_key)
+    return AsyncOpenAI(api_key=api_key, base_url=settings.openai_base_url)
 
 
 @lru_cache
