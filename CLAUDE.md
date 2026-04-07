@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-Modal RAG Pipeline: a document intelligence system that converts PDFs into Markdown, structured JSON, and RAG-ready chunks using hybrid vector search. Ranked #1 on OmniDocBench V1.5. Supports two backends: cloud (Z.AI MaaS) or fully local (Ollama).
+Multi-Modal RAG Pipeline: a document intelligence system that converts PDFs into Markdown, structured JSON, and RAG-ready chunks using hybrid vector search. 
 
 ## Commands
 
