@@ -111,3 +111,15 @@ Copy `.env.example` to `.env`. Key variables:
 | `GEMINI_API_KEY` | — | Required when `EMBEDDING_PROVIDER=gemini` |
 
 GLM-OCR SDK configuration lives in `config.yaml` (cloud) or `ollama/config.yaml` (local).
+
+---
+
+## Mistake Log — What Not To Try
+
+Running research log for this project. Every time an approach fails, a wrong assumption is made, or a dead end is hit, append an entry here. Future Claude instances must read this section before starting work to avoid repeating the same mistakes.
+
+**Format:** `[YYYY-MM-DD] [area] — what was tried → why it failed → what to do instead.`
+
+When a mistake is identified — caught by Murtuza or self-detected — append it here immediately. Do not wait until end of session.
+
+<!-- entries below -->
