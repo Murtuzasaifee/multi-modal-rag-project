@@ -84,6 +84,55 @@ def _parse_text_response(raw_original: str, enriched: str) -> tuple[str, str]:
     return raw_original, enriched.strip() if enriched.strip() else raw_original
 
 
+def _try_parse_json_lenient(s: str) -> dict | None:
+    """Try several strategies to extract a JSON object from an LLM response.
+
+    LLMs (especially smaller quantized ones like Qwen3-VL-4B-AWQ) often emit
+    JSON wrapped in markdown code fences, prefixed with chatty text, or with
+    other minor wrapping that breaks ``json.loads`` even when the underlying
+    object is well-formed. This helper tries, in order:
+
+      1. Strict ``json.loads`` on the original string.
+      2. Strip leading/trailing markdown code fences (``` or ```json) and retry.
+      3. Extract the substring from the first ``{`` to the last ``}`` and retry.
+
+    Returns the parsed dict on success, or ``None`` if every strategy fails.
+    """
+    if not s:
+        return None
+    s = s.strip()
+
+    # Strategy 1: strict parse
+    try:
+        result = json.loads(s)
+        return result if isinstance(result, dict) else None
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    # Strategy 2: strip markdown fences (```json ... ``` or ``` ... ```)
+    fenced = re.sub(r"^```(?:json)?\s*\n?", "", s)
+    fenced = re.sub(r"\n?```\s*$", "", fenced).strip()
+    if fenced != s:
+        try:
+            result = json.loads(fenced)
+            return result if isinstance(result, dict) else None
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Strategy 3: extract first balanced-looking {...} substring
+    start = s.find("{")
+    end = s.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        candidate = s[start : end + 1]
+        try:
+            result = json.loads(candidate)
+            return result if isinstance(result, dict) else None
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    return None
+
+
 def _parse_table_json_response(raw_ocr: str, json_str: str) -> tuple[str, str]:
     """Parse structured table JSON response.
 
@@ -92,10 +141,17 @@ def _parse_table_json_response(raw_ocr: str, json_str: str) -> tuple[str, str]:
         and text = semantic summary (for embedding/retrieval).
         Falls back to raw OCR on parse failure.
     """
-    try:
-        data = json.loads(json_str)
-    except (json.JSONDecodeError, TypeError):
-        logger.warning("Table JSON parse failed, falling back to raw OCR")
+    data = _try_parse_json_lenient(json_str)
+    if data is None:
+        # Log the actual response so we can see what the model produced.
+        # This is the difference between "JSON parse failed (no idea why)"
+        # and "ah, the model returned prose because the input wasn't tabular".
+        preview = (json_str or "")[:500].replace("\n", "\\n")
+        logger.warning(
+            "Table JSON parse failed, falling back to raw OCR. "
+            "Response preview (first 500 chars): %s",
+            preview,
+        )
         return raw_ocr, raw_ocr
 
     markdown_table = data.get("markdown_table", "")
@@ -110,6 +166,28 @@ def _parse_table_json_response(raw_ocr: str, json_str: str) -> tuple[str, str]:
     text = summary if summary else raw_ocr
 
     return caption, text
+
+
+def _looks_like_table(text: str) -> bool:
+    """Heuristic: True if ``text`` looks like tabular data, False if it's prose.
+
+    Used as a pre-filter so we skip the table-extraction LLM call when the
+    layout detector has mis-classified a caption paragraph (e.g. "Table 1:
+    Runtime characteristics...", "Figure 3: Page 6 of the DocLayNet paper...")
+    as a ``table`` region. Real tables OCR'd by GLM-OCR come back as
+    pipe-delimited markdown; mis-classified caption text has zero pipes.
+    """
+    if not text or not text.strip():
+        return False
+    # GLM-OCR emits markdown-formatted tables with `|` separators. Real tables
+    # have many; prose has none.
+    if text.count("|") >= 3:
+        return True
+    # Tab-separated layouts are uncommon from GLM-OCR but possible from other
+    # OCR backends. Cheap to check.
+    if text.count("\t") >= 3:
+        return True
+    return False
 
 
 def _validate_table_extraction(
@@ -422,13 +500,43 @@ async def enrich_chunks(
                 chunk.caption = None
                 chunk.text = chunk.text or "[figure]"
         elif chunk.modality == "table":
-            # Crop the table region for visual context — generation LLM can see the
-            # actual table layout (merged cells, multi-level headers) alongside the
-            # extracted markdown. Mirrors the image chunk crop pattern.
+            # Always crop the table region first — the pixel crop is the most
+            # reliable multi-modal signal we have. Both the reranker and the
+            # generation LLM use this crop alongside any extracted text, and
+            # for tables where GLM-OCR failed to emit pipe-delimited markdown
+            # (see the skip branch below) the crop is the ONLY way the VLM
+            # can "see" the table structure.
             if chunk.bbox is not None:
                 b64 = _crop_image_chunk(chunk, pdf_path)
                 if b64 is not None:
                     chunk.image_base64 = b64
+
+            # Pre-filter: PP-DocLayoutV3 sometimes mis-classifies caption
+            # paragraphs (e.g. "Table 1: Runtime characteristics...",
+            # "Figure 3: Page 6 of the DocLayNet paper...") as table regions.
+            # The OCR text for those is plain prose with no pipe delimiters,
+            # which makes the table-extraction LLM call wasteful (the model
+            # has no actual table to convert to JSON) and also pollutes the
+            # generate-time context with confusing "Full table data:" labels.
+            #
+            # We skip the LLM enrichment call for these chunks, but we TRUST
+            # the layout detector's label: modality stays "table" so retrieval
+            # still surfaces this chunk when the user asks a table question.
+            # Previously we demoted modality→text here, which ate real tables
+            # whose OCR output happened to have fewer than 3 pipe characters
+            # (short tables, numeric-only cells, truncated headers, etc.).
+            if not _looks_like_table(chunk.text):
+                logger.info(
+                    "Skipping LLM extraction for chunk %s (no tabular markers: "
+                    "pipes=%d, len=%d) — keeping modality=table, image cropped=%s",
+                    chunk.chunk_id,
+                    chunk.text.count("|"),
+                    len(chunk.text),
+                    chunk.image_base64 is not None,
+                )
+                counts["table_skipped"] += 1
+                continue
+
             tasks.append(
                 _enrich_table_single(chunk, client, semaphore, model, pdf_path=pdf_path)
             )
@@ -446,9 +554,10 @@ async def enrich_chunks(
     await asyncio.gather(*tasks)
 
     logger.info(
-        "Processed %d image (cropped, no LLM) / %d table / %d formula / %d algorithm chunks from %s",
+        "Processed %d image (cropped, no LLM) / %d table / %d formula / %d algorithm "
+        "(+%d table LLM-skipped, modality preserved) chunks from %s",
         counts["image"], counts["table"], counts["formula"], counts["algorithm"],
-        pdf_path.name,
+        counts["table_skipped"], pdf_path.name,
     )
     return chunks
 

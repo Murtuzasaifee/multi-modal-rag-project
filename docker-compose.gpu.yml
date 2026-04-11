@@ -36,10 +36,10 @@ services:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [ gpu ]
+              capabilities: [gpu]
 
   qdrant:
-    image: qdrant/qdrant:v1.17.1
+    image: qdrant/qdrant:v1.17.0
     ports:
       - "6333:6333"
       - "6334:6334"
@@ -69,7 +69,7 @@ services:
       # KV cache (16384 ctx × 4 slots) ≈ 4 GiB = ~6.2 GiB total of 22.5 GiB.
       - OLLAMA_CONTEXT_LENGTH=16384
     healthcheck:
-      test: [ "CMD", "ollama", "list" ]
+      test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -81,7 +81,7 @@ services:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [ gpu ]
+              capabilities: [gpu]
 
   vllm:
     image: vllm/vllm-openai:latest
@@ -94,10 +94,15 @@ services:
     volumes:
       - huggingface_cache:/root/.cache/huggingface
     command: >
-      --model Qwen/Qwen3-VL-4B-Instruct-FP8  --port 8000 --dtype bfloat16  --gpu-memory-utilization 0.84  --max-model-len 8192  --mm-encoder-tp-mode data 
-    #      --limit-mm-per-prompt image=10
+      --model cyankiwi/Qwen3-VL-4B-Instruct-AWQ-4bit
+      --port 8000
+      --dtype bfloat16
+      --gpu-memory-utilization 0.3167
+      --max-model-len 8192
+      --mm-encoder-tp-mode data
+ #     --limit-mm-per-prompt image=10
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -108,7 +113,7 @@ services:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [ gpu ]
+              capabilities: [gpu]
 
   vllm-4bit:
     image: vllm/vllm-openai:latest
@@ -121,10 +126,16 @@ services:
     volumes:
       - huggingface_cache:/root/.cache/huggingface
     command: >
-      --model Qwen/Qwen3-VL-8B-Instruct-FP8 --quantization awq --port 8000 --dtype bfloat16 --gpu-memory-utilization 0.50 --max-model-len 8192 --mm-encoder-tp-mode data 
-    #			--limit-mm-per-prompt image=10
+      --model Qwen/Qwen3-VL-8B-Instruct-AWQ
+      --quantization awq
+      --port 8000
+      --dtype bfloat16
+      --gpu-memory-utilization 0.40
+      --max-model-len 32768
+      --mm-encoder-tp-mode data
+      --limit-mm-per-prompt image=10
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -135,7 +146,7 @@ services:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [ gpu ]
+              capabilities: [gpu]
 
   visualizer:
     build:
