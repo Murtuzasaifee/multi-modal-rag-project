@@ -134,7 +134,7 @@ resource "aws_ecs_task_definition" "app" {
 
       environment = [
         {
-          name  = "QDRANT__SERVICE__STORAGE__SKIP_FILESYNC_ON_OPEN"
+          name  = "QDRANT__STORAGE__SKIP_FILESYNC_ON_OPEN"
           value = "true"
         }
       ]
@@ -157,7 +157,7 @@ resource "aws_ecs_task_definition" "app" {
       }
 
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:${var.qdrant_port}/healthz || exit 1"]
+        command     = ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/${var.qdrant_port}' || exit 1"]
         interval    = 30
         timeout     = 5
         retries     = 3
