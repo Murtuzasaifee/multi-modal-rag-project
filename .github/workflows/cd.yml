@@ -26,7 +26,7 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
         with:
-          registries: "685057748560"
+          registries: "958614257254"
 
       - name: Build and push app image
         id: build-app
