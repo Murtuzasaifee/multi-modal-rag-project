@@ -18,23 +18,32 @@ cd infra
 ./setup-backend.sh
 ```
 
-### 2. Initialize Terraform
+### 2. Configure Variables
+
+Create your variables file from the example template:
 
 ```bash
 cd terraform
+cp terraform.tfvars.example terraform.tfvars
+# Open terraform.tfvars in your editor and update the values
+```
+
+### 3. Initialize Terraform
+
+```bash
 terraform init -backend-config="bucket=doc-parser-terraform-state-{YOUR_ACCOUNT_ID}"
 ```
 
 Get your account ID: `aws sts get-caller-identity --query Account --output text`
 
-### 3. Review and Apply
+### 4. Review and Apply
 
 ```bash
 terraform plan
 terraform apply
 ```
 
-### 4. Set OpenAI Secret
+### 5. Set OpenAI Secret
 
 ```bash
 aws secretsmanager put-secret-value \
@@ -42,7 +51,7 @@ aws secretsmanager put-secret-value \
   --secret-string '{"openai_api_key":"sk-..."}'
 ```
 
-### 5. Set Up GitHub Secrets for CI/CD
+### 6. Set Up GitHub Secrets for CI/CD
 
 If you are using GitHub Actions for deployment, run this script to inject the Terraform outputs to your repository's secrets. Make sure you have the `gh` CLI installed.
 
@@ -51,7 +60,7 @@ cd ..
 ./setup-github-secrets.sh
 ```
 
-### 6. Bootstrap Ollama Model (one-time)
+### 7. Bootstrap Ollama Model (one-time)
 
 ```bash
 cd ..
