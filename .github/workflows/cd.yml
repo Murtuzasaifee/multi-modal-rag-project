@@ -2,7 +2,7 @@ name: CD
 
 on:
   push:
-    branches: [main]
+    branches: [deployment]
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -13,7 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       app_image: ${{ steps.build-app.outputs.image }}
-      viz_image: ${{ steps.build-viz.outputs.image }}
     steps:
       - uses: actions/checkout@v4
 
@@ -23,32 +22,30 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registries: "685057748560"
 
       - name: Build and push app image
         id: build-app
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          IMAGE=${{ env.ECR_REGISTRY }}/doc-parser/app:${{ github.sha }}
+          IMAGE=$REGISTRY/doc-parser/app:${{ github.sha }}
           docker build -t $IMAGE .
-          docker tag $IMAGE ${{ env.ECR_REGISTRY }}/doc-parser/app:latest
+          docker tag $IMAGE $REGISTRY/doc-parser/app:latest
           docker push $IMAGE
-          docker push ${{ env.ECR_REGISTRY }}/doc-parser/app:latest
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
-
-      - name: Build and push visualizer image
-        id: build-viz
-        run: |
-          IMAGE=${{ env.ECR_REGISTRY }}/doc-parser/visualizer:${{ github.sha }}
-          docker build -f Dockerfile.visualizer -t $IMAGE .
-          docker tag $IMAGE ${{ env.ECR_REGISTRY }}/doc-parser/visualizer:latest
-          docker push $IMAGE
-          docker push ${{ env.ECR_REGISTRY }}/doc-parser/visualizer:latest
+          docker push $REGISTRY/doc-parser/app:latest
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
 
   deploy:
     runs-on: ubuntu-latest
     needs: build-and-push
     steps:
+      - uses: actions/checkout@v4
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -61,13 +58,48 @@ jobs:
             --cluster ${{ secrets.ECS_CLUSTER }} \
             --service ${{ secrets.ECS_SERVICE_APP }} \
             --force-new-deployment
-          aws ecs update-service \
-            --cluster ${{ secrets.ECS_CLUSTER }} \
-            --service ${{ secrets.ECS_SERVICE_VISUALIZER }} \
-            --force-new-deployment
 
-      - name: Wait for services stable
+      - name: Wait for service stable
         run: |
-          aws ecs wait services-stable \
-            --cluster ${{ secrets.ECS_CLUSTER }} \
-            --services ${{ secrets.ECS_SERVICE_APP }} ${{ secrets.ECS_SERVICE_VISUALIZER }}
+          echo "Polling ECS service stability (max 15 min)..."
+          for i in $(seq 1 60); do
+            RUNNING=$(aws ecs describe-services \
+              --cluster ${{ secrets.ECS_CLUSTER }} \
+              --services ${{ secrets.ECS_SERVICE_APP }} \
+              --query 'services[0].runningCount' --output text)
+            DESIRED=$(aws ecs describe-services \
+              --cluster ${{ secrets.ECS_CLUSTER }} \
+              --services ${{ secrets.ECS_SERVICE_APP }} \
+              --query 'services[0].desiredCount' --output text)
+            PENDING=$(aws ecs describe-services \
+              --cluster ${{ secrets.ECS_CLUSTER }} \
+              --services ${{ secrets.ECS_SERVICE_APP }} \
+              --query 'services[0].pendingCount' --output text)
+            echo "Attempt $i/60 — running=$RUNNING desired=$DESIRED pending=$PENDING"
+            if [ "$RUNNING" = "$DESIRED" ] && [ "$PENDING" = "0" ]; then
+              echo "Service is stable."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Service did not stabilize within 15 minutes."
+          exit 1
+
+      - name: Smoke test
+        run: |
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --names doc-parser-alb \
+            --query 'LoadBalancers[0].DNSName' \
+            --output text)
+          echo "Testing http://$ALB_DNS/health"
+          for i in {1..5}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://$ALB_DNS/health")
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (HTTP $STATUS)"
+              exit 0
+            fi
+            echo "Attempt $i: HTTP $STATUS — retrying in 15s..."
+            sleep 15
+          done
+          echo "Health check failed after 5 attempts"
+          exit 1
