@@ -133,7 +133,11 @@ resource "aws_iam_user_policy" "cicd" {
       {
         Sid    = "ECSDeployServices"
         Effect = "Allow"
-        Action = ["ecs:UpdateService", "ecs:DescribeServices"]
+        Action = [
+          "ecs:UpdateService",
+          "ecs:DescribeServices",
+          "elasticloadbalancing:DescribeLoadBalancers"
+        ]
         Resource = "*"
       },
       {

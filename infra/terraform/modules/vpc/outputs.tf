@@ -5,5 +5,5 @@ output "vpc_id" {
 
 output "subnet_ids" {
   description = "Subnet IDs"
-  value       = length(coalesce(var.subnet_ids, [])) > 0 ? var.subnet_ids : data.aws_subnets.default[0].ids
+  value       = length(coalesce(var.subnet_ids, [])) > 0 ? var.subnet_ids : slice(data.aws_subnets.default[0].ids, 0, 2)
 }

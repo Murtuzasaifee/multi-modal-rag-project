@@ -62,12 +62,17 @@ output "task_definition_arns" {
 
 output "alb_dns_name" {
   description = "ALB DNS name"
-  value       = try(module.alb.dns_name, null)
+  value       = try(module.alb[0].alb_dns_name, null)
+}
+
+output "alb_public_url" {
+  description = "ALB public URL"
+  value       = try("http://${module.alb[0].alb_dns_name}", null)
 }
 
 output "alb_zone_id" {
   description = "ALB hosted zone ID for Route53 alias"
-  value       = try(module.alb.zone_id, null)
+  value       = try(module.alb[0].alb_zone_id, null)
 }
 
 output "service_arns" {

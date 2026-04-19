@@ -11,10 +11,15 @@ Deploy the Multi-Modal RAG pipeline to AWS using Terraform.
 
 ## Deployment Steps
 
-### 1. Setup S3 Backend
+**Important:** Navigate to the `infra` directory first. All commands in this guide must be run from this directory.
 
 ```bash
 cd infra
+```
+
+### 1. Setup S3 Backend
+
+```bash
 ./setup-backend.sh
 ```
 
@@ -23,15 +28,14 @@ cd infra
 Create your variables file from the example template:
 
 ```bash
-cd terraform
-cp terraform.tfvars.example terraform.tfvars
-# Open terraform.tfvars in your editor and update the values
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+# Open terraform/terraform.tfvars in your editor and update the values
 ```
 
 ### 3. Initialize Terraform
 
 ```bash
-terraform init -backend-config="bucket=doc-parser-terraform-state-{YOUR_ACCOUNT_ID}"
+terraform -chdir=terraform init -backend-config="bucket=doc-parser-terraform-state-{YOUR_ACCOUNT_ID}"
 ```
 
 Get your account ID: `aws sts get-caller-identity --query Account --output text`
@@ -39,8 +43,8 @@ Get your account ID: `aws sts get-caller-identity --query Account --output text`
 ### 4. Review and Apply
 
 ```bash
-terraform plan
-terraform apply
+terraform -chdir=terraform plan
+terraform -chdir=terraform apply
 ```
 
 > **Note:** Right after `terraform apply`, the newly created ECS service will attempt to start the `app` container but will stay in a `PENDING`/`FAILED` loop. This is expected! The ECR repository was just created and is currently empty. The ECS service will successfully start once you commit your code and the GitHub Actions CI/CD pipeline builds and pushes the Docker image.
@@ -58,14 +62,22 @@ aws secretsmanager put-secret-value \
 If you are using GitHub Actions for deployment, run this script to inject the Terraform outputs to your repository's secrets. Make sure you have the `gh` CLI installed.
 
 ```bash
-cd ..
 ./setup-github-secrets.sh
 ```
 
-### 7. Bootstrap Ollama Model (one-time)
+### 7. Trigger the CI/CD Pipeline
+
+Now that your GitHub repository has the required secrets exported from Terraform, push your code to the `terraform` branch to trigger the GitHub Actions workflow. This will build the Docker image, push it to ECR, and satisfy the pending ECS service.
 
 ```bash
-cd ..
+git add .
+git commit -m "Trigger deployment"
+git push origin <your-current-branch>:terraform
+```
+
+### 8. Bootstrap Ollama Model (one-time)
+
+```bash
 ./bootstrap-ollama.sh glm-ocr:latest
 ```
 
@@ -73,17 +85,16 @@ cd ..
 
 ```bash
 # Get ALB URL
-terraform output alb_dns_name
+terraform -chdir=terraform output alb_public_url
 
 # Health check
-curl http://$(terraform output -raw alb_dns_name)/health
+curl $(terraform -chdir=terraform output -raw alb_public_url)/health
 ```
 
 ## Teardown
 
 ```bash
-cd infra/terraform
-terraform destroy
+terraform -chdir=terraform destroy
 ```
 
 ## Cost Saving

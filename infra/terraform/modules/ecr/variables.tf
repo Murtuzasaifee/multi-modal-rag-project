@@ -36,3 +36,9 @@ variable "scan_on_push" {
   type        = bool
   default     = true
 }
+
+variable "force_delete" {
+  description = "If true, deleting the repository will force delete all images within it"
+  type        = bool
+  default     = true
+}
