@@ -2,7 +2,7 @@ name: CD
 
 on:
   push:
-    branches: [deployment]
+    branches: [terraform]
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}

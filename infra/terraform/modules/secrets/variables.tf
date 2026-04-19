@@ -20,7 +20,7 @@ variable "secret_values" {
 variable "recovery_window_in_days" {
   description = "Number of days before secret can be deleted"
   type        = number
-  default     = 30
+  default     = 0
 }
 
 variable "enable_rotation" {

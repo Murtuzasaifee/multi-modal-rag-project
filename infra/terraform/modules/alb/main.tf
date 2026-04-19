@@ -6,7 +6,6 @@ resource "aws_lb" "main" {
   security_groups    = [var.security_group_id]
 
   enable_http2                = true
-  enable_cross_zone_load_balancing = true
   drop_invalid_header_fields  = var.drop_invalid_header_fields
   idle_timeout               = var.idle_timeout
 
