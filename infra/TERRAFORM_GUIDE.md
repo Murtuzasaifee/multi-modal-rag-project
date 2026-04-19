@@ -43,6 +43,8 @@ terraform plan
 terraform apply
 ```
 
+> **Note:** Right after `terraform apply`, the newly created ECS service will attempt to start the `app` container but will stay in a `PENDING`/`FAILED` loop. This is expected! The ECR repository was just created and is currently empty. The ECS service will successfully start once you commit your code and the GitHub Actions CI/CD pipeline builds and pushes the Docker image.
+
 ### 5. Set OpenAI Secret
 
 ```bash
