@@ -2,7 +2,7 @@ name: CD
 
 on:
   push:
-    branches: [terraform]
+    branches: [feature/terraform-azure]
 
 env:
   ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
