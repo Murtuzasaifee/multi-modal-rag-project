@@ -32,7 +32,7 @@ resource "azurerm_container_app_environment_storage" "ollama" {
 }
 
 # ── Key Vault secrets ──────────────────────────────────────────────────────────
-# Placeholder values; set real values post-deploy:
+# Placeholder values — set real values post-deploy:
 #   az keyvault secret set --vault-name <name> --name openai-api-key --value sk-...
 # ignore_changes prevents Terraform from overwriting manually set values.
 

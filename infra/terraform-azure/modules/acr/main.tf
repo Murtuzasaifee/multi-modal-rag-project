@@ -4,7 +4,8 @@ resource "azurerm_container_registry" "main" {
   resource_group_name = var.resource_group_name
   location            = var.location
   sku                 = var.sku
-  # Admin credentials disabled; CI/CD uses a service principal with AcrPush role.
+  # Admin credentials disabled
+  # CI/CD uses a service principal with AcrPush role.
   admin_enabled = false
   tags          = var.tags
 }
