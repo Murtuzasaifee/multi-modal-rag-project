@@ -1,0 +1,35 @@
+# Copy this file to terraform.tfvars and fill in values before running plan/apply.
+
+location     = "eastus"
+environment  = "dev"
+project_name = "doc-parser"
+
+# ── ACR ────────────────────────────────────────────────────────────────────────
+acr_sku = "Basic"   # Basic is sufficient for dev; use Standard for geo-replication
+
+# ── Container resources ────────────────────────────────────────────────────────
+# Three containers share a single Container App on the Consumption plan.
+# Maximum per Container App: 4 vCPU / 8 Gi.  These defaults total 3.5 / 7 Gi.
+app_cpu       = 1.0
+app_memory    = "2.0Gi"
+qdrant_cpu    = 0.5
+qdrant_memory = "1.0Gi"
+ollama_cpu    = 2.0
+ollama_memory = "4.0Gi"
+
+# ── Scaling ────────────────────────────────────────────────────────────────────
+app_min_replicas = 1   # set to 0 to enable scale-to-zero (cold-start latency)
+app_max_replicas = 3
+
+# ── Application ────────────────────────────────────────────────────────────────
+parser_backend     = "cloud"    # "cloud" (Z.AI) or "ollama" (local Ollama)
+embedding_provider = "openai"
+reranker_backend   = "openai"
+
+# ── Observability ──────────────────────────────────────────────────────────────
+log_retention_days = 30
+
+# ── Extra tags ─────────────────────────────────────────────────────────────────
+tags = {
+  Team = "ml-platform"
+}
