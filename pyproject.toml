@@ -3,7 +3,7 @@ name = "doc-parser"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "glmocr[layout]>=0.1.0",
+    "glmocr>=0.1.0",
     "pymupdf>=1.27.2",
     "Pillow>=12.1.1",
     "pyyaml>=6.0",
@@ -56,9 +56,19 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP"]
+ignore = ["E501", "B008"]
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = false
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["fitz", "tqdm.*", "torch.*", "transformers.*", "google.*", "glmocr.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

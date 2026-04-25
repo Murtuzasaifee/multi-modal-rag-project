@@ -64,7 +64,3 @@ pp_doclayout_v3_glm_ocr_implementation_plan.md
 
 # ── Claude Code local config ──────────────────────────────────────────────────
 .claude/
-
-test_data/
-
-data/chunks/

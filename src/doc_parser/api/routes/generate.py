@@ -24,14 +24,46 @@ _DEFAULT_SYSTEM_PROMPT = (
 )
 
 
+def _build_user_content(
+    context: str,
+    query: str,
+    candidates: list[dict],
+) -> "str | list[dict]":
+    """Build the user message content for GPT-5.4-mini .
+
+    Returns a plain string when no candidates carry image_base64 (text-only
+    path, identical to previous behaviour). Returns a multimodal content list
+    when at least one visual chunk has image_base64 populated, interleaving
+    the text context with inline base64 image blocks.
+    """
+    visual_chunks = [c for c in candidates if c.get("image_base64")]
+
+    if not visual_chunks:
+        return f"Context:\n{context}\n\nQuestion: {query}"
+
+    content: list[dict] = [
+        {"type": "text", "text": f"Context:\n{context}\n\nQuestion: {query}"},
+    ]
+    for c in visual_chunks:
+        b64 = c["image_base64"]
+        modality = c.get("modality", "visual")
+        page = c.get("page", "?")
+        content.append({"type": "text", "text": f"[page {page}] {modality.capitalize()} visual:"})
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{b64}"},
+        })
+    return content
+
+
 @router.post("", response_model=GenerateResponse)
 async def generate(req: GenerateRequest) -> GenerateResponse:
-    """Retrieve relevant chunks and generate an answer with GPT-5.4-mini.
+    """Retrieve relevant chunks and generate an answer with GPT-5.4-mini .
 
     1. Embed query → hybrid search in Qdrant.
     2. Optionally rerank candidates.
     3. Build context string from top-n chunks.
-    4. Call GPT-5.4-mini and return answer + source chunks.
+    4. Call GPT-5.4-mini  and return answer + source chunks.
     """
     settings = get_settings()
     store = get_store()
@@ -93,7 +125,7 @@ async def generate(req: GenerateRequest) -> GenerateResponse:
             model=settings.openai_llm_model,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {req.query}"},
+                {"role": "user", "content": _build_user_content(context, req.query, candidates)},
             ],
             max_completion_tokens=req.max_completion_tokens,
             temperature=0.0,
@@ -117,6 +149,7 @@ async def generate(req: GenerateRequest) -> GenerateResponse:
             is_atomic=c.get("is_atomic", False),
             caption=c.get("caption"),
             rerank_score=c.get("rerank_score"),
+            image_base64=c.get("image_base64"),
         )
         for c in candidates
     ]

@@ -1,0 +1,36 @@
+# Terraform Variables Example
+# Copy this file to terraform.tfvars and fill in your values
+
+# AWS Configuration
+aws_region  = "us-east-1"
+environment = "dev"
+
+# AWS Credentials (optional - overrides profile/env variables)
+# Only use for CI/CD pipelines where you want explicit credentials
+aws_access_key_id     = null  # Your AWS Access Key ID
+aws_secret_access_key = null  # Your AWS Secret Access Key
+
+# Project Configuration
+project_name  = "doc-parser"
+cluster_name  = "doc-parser-cluster"
+
+# Network Configuration
+# Leave null to use default VPC and subnets
+vpc_id     = null
+subnet_ids  = null
+
+# ECS Configuration
+app_cpu        = 2048
+app_memory     = 16384
+desired_count  = 1
+
+# Application Configuration
+parser_backend = "ollama"  # "cloud" or "ollama"
+enable_alb     = true
+
+# ECR Configuration (optional)
+# Repositories are defined in main.tf under module.ecr
+# This is for any additional configuration if needed
+
+# Security (optional)
+# alb_ingress_cidr = ["0.0.0.0/0"]  # Uncomment to restrict ALB access
