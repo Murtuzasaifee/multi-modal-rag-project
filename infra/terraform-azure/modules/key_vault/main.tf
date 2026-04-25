@@ -6,7 +6,7 @@ resource "random_id" "suffix" {
 }
 
 resource "azurerm_key_vault" "main" {
-  name                       = "${var.project_name}-${var.environment}-kv-${random_id.suffix.hex}"
+  name                       = "${var.project_name}-${substr(var.environment, 0, 2)}kv${random_id.suffix.hex}"
   location                   = var.location
   resource_group_name        = var.resource_group_name
   tenant_id                  = data.azurerm_client_config.current.tenant_id

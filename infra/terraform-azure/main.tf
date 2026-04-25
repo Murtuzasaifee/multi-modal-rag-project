@@ -88,7 +88,7 @@ module "container_apps" {
   project_name               = var.project_name
   environment                = var.environment
   infrastructure_subnet_id   = module.networking.container_apps_subnet_id
-  log_analytics_workspace_id = module.log_analytics.workspace_id
+  log_analytics_workspace_id = module.log_analytics.id
   log_analytics_primary_key  = module.log_analytics.primary_shared_key
   acr_login_server           = module.acr.login_server
   managed_identity_id        = module.managed_identity.id
