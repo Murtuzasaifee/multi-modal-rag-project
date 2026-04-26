@@ -39,6 +39,14 @@ The three containers share one network namespace (identical to the ECS task appr
 - Azure CLI: `az --version` ≥ 2.55
 - Terraform: `terraform --version` ≥ 1.5
 - GitHub CLI: `gh --version` (for secret setup)
+- **Required Azure provider registration** (run once per subscription):
+
+```bash
+az provider register --namespace Microsoft.App
+az provider register --namespace Microsoft.Insights
+# Wait for registrationState to return "Registered"
+az provider show --namespace Microsoft.App --query registrationState -o tsv
+```
 
 ## 1. Provision Terraform State Backend
 
@@ -83,6 +91,8 @@ Terraform will create:
 - Log Analytics Workspace
 - User-Assigned Managed Identity
 - Container Apps Environment + Container App
+
+> **Note**: The Container App creation will fail with `MANIFEST_UNKNOWN: manifest tagged by "latest" is not found`. This is **expected** — the Docker image doesn't exist in ACR yet. The app will transition to `Running` after step 7 when CI/CD pushes the image.
 
 ## 5. Set the OpenAI API Key
 
@@ -133,6 +143,7 @@ If you set `parser_backend = "ollama"`, pull the model into the ollama sidecar:
 ```bash
 cd infra
 bash bootstrap-ollama-azure.sh glm-ocr:latest
+
 # Inside the shell: ollama pull glm-ocr:latest && exit
 ```
 
@@ -142,6 +153,114 @@ bash bootstrap-ollama-azure.sh glm-ocr:latest
 APP_URL=$(terraform -chdir=infra/terraform-azure output -raw container_app_url)
 curl "$APP_URL/health"
 ```
+
+## 10. Destroy Infrastructure (Cleanup)
+
+To remove all Azure resources created by Terraform:
+
+```bash
+cd infra/terraform-azure
+terraform destroy
+```
+
+Follow prompts and type `yes` to confirm. This will destroy:
+- Container App + Environment
+- Key Vault (secrets are also deleted)
+- Storage Account (File Shares are deleted with the account)
+- Container Registry
+- Log Analytics Workspace
+- Managed Identity
+- VNet + Subnet + NSG
+- Resource Group (if empty after resource deletion)
+
+> **Important**: The Terraform state backend (storage account created in step 1) is **not** destroyed. To remove it:
+
+```bash
+cd infra
+az storage account delete --name <your-sa-name> --resource-group doc-parser-tfstate-rg
+az group delete --name doc-parser-tfstate-rg --yes
+```
+
+## Common Issues & Expected Errors
+
+<details>
+<summary><strong>MissingSubscriptionRegistration: The subscription is not registered to use namespace 'Microsoft.App'</strong></summary>
+
+This occurs if the Azure Container Apps provider isn't registered for your subscription.
+
+```bash
+az provider register --namespace Microsoft.App
+az provider register --namespace Microsoft.Insights
+# Wait until registrationState returns "Registered" (may take 2-5 minutes)
+az provider show --namespace Microsoft.App --query registrationState -o tsv
+```
+</details>
+
+<details>
+<summary><strong>MANIFEST_UNKNOWN: manifest tagged by "latest" is not found</strong></summary>
+
+**This is expected and not an error.** Terraform successfully creates the Container App infrastructure, but the Docker image hasn't been pushed to ACR yet (this happens in step 7 when you push to the `terraform` branch and trigger the CI/CD pipeline).
+
+The Container App will show a `Failed` state initially. Once the CI/CD pipeline pushes the image to ACR and triggers a revision update, the app will transition to `Running`.
+
+To verify after CI/CD completes:
+```bash
+az containerapp revision list \
+  --name doc-parser-app \
+  --resource-group doc-parser-dev-rg \
+  --query "[].properties.runningState"
+```
+</details>
+
+<details>
+<summary><strong>Key Vault: Forbidden (403) during Terraform apply</strong></summary>
+
+If Terraform fails creating a Key Vault secret with 403, but the access policy should exist, this is often a state file consistency issue. The access policy may have been created correctly, but Terraform state doesn't track it.
+
+```bash
+# Remove the failed secret resource from state and retry
+terraform state rm 'module.container_apps.azurerm_key_vault_secret.openai_api_key'
+terraform apply tfplan
+```
+
+Alternatively, verify the policy exists manually:
+```bash
+KV_NAME=$(terraform output -raw key_vault_name)
+USER_OBJECT_ID=$(az ad signed-in-user show --query objectId -o tsv)
+az keyvault show --name "$KV_NAME" --query "properties.accessPolicies[?objectId=='$USER_OBJECT_ID']"
+```
+</details>
+
+<details>
+<summary><strong>Key Vault name exceeds 24 characters</strong></summary>
+
+Azure Key Vault names are globally unique and must be 3-24 alphanumeric characters plus hyphens. The Terraform code uses a shortened format to stay within limits:
+
+```
+${var.project_name}-${substr(var.environment, 0, 2)}kv${random_id.suffix.hex}
+# Example: doc-parserdevkv90461d61 (22 chars)
+```
+
+If you encounter this error, you may have an older state file. Either:
+- Destroy and re-apply: `terraform destroy && terraform apply tfplan`
+- Or manually import the corrected resources if the Key Vault exists with a valid name.
+</details>
+
+<details>
+<summary><strong>parsing the Workspace ID: the number of segments didn't match</strong></summary>
+
+This error occurs if the Terraform code incorrectly passes the Log Analytics `workspace_id` (a UUID) instead of the full resource `id`. The correct Terraform code uses `module.log_analytics.id`.
+
+If you encounter this with an older state or state inconsistency:
+```bash
+# Refresh state to sync with Azure
+terraform refresh
+
+# Or remove and re-apply the affected resource
+terraform state rm 'module.container_apps.azurerm_container_app_environment.main'
+terraform apply tfplan
+```
+</details>
 
 ## Useful Commands
 
